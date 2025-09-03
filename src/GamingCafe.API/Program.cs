@@ -5,6 +5,7 @@ using System.Text;
 using GamingCafe.Data;
 using GamingCafe.API.Services;
 using GamingCafe.API.Hubs;
+using Npgsql.EntityFrameworkCore.PostgreSQL;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,7 +14,7 @@ builder.Services.AddControllers();
 
 // Configure Entity Framework
 builder.Services.AddDbContext<GamingCafeContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // Configure JWT Authentication
 var jwtKey = builder.Configuration["Jwt:Key"];

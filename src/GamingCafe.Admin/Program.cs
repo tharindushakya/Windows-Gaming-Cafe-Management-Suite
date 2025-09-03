@@ -14,7 +14,7 @@ builder.Services.AddHttpClient();
 
 // Configure Entity Framework with DbContextFactory for thread safety
 builder.Services.AddDbContextFactory<GamingCafeContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // Add custom services
 builder.Services.AddScoped<IPOSService, POSService>();
