@@ -2,6 +2,8 @@ using System.ComponentModel.DataAnnotations;
 
 namespace GamingCafe.Core.Models;
 
+// Legacy PS5Console class for backward compatibility
+// Redirects to the new GameConsole system
 public class PS5Console
 {
     public int ConsoleId { get; set; }
@@ -94,34 +96,4 @@ public class PS5RemoteCommand
 
     // Navigation properties
     public virtual PS5Console Console { get; set; } = null!;
-}
-
-public enum ConsoleStatus
-{
-    Offline = 0,
-    Online = 1,
-    InUse = 2,
-    Maintenance = 3,
-    Error = 4
-}
-
-public enum CommandType
-{
-    PowerOn = 0,
-    PowerOff = 1,
-    StartGame = 2,
-    EndSession = 3,
-    GetStatus = 4,
-    Screenshot = 5,
-    RestartConsole = 6,
-    UpdateTime = 7
-}
-
-public enum CommandStatus
-{
-    Pending = 0,
-    Executing = 1,
-    Completed = 2,
-    Failed = 3,
-    Timeout = 4
 }

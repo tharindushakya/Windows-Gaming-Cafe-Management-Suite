@@ -17,7 +17,13 @@ public class GamingCafeContext : DbContext
     public DbSet<GameSession> GameSessions { get; set; }
     public DbSet<Reservation> Reservations { get; set; }
 
-    // PS5 Integration
+    // Console Integration - Modern Multi-Platform Support
+    public DbSet<GameConsole> GameConsoles { get; set; }
+    public DbSet<ConsoleSession> ConsoleSessions { get; set; }
+    public DbSet<ConsoleRemoteCommand> ConsoleRemoteCommands { get; set; }
+    public DbSet<ConsoleGame> ConsoleGames { get; set; }
+
+    // Legacy PS5 Integration (for backward compatibility)
     public DbSet<PS5Console> PS5Consoles { get; set; }
     public DbSet<PS5Session> PS5Sessions { get; set; }
     public DbSet<PS5RemoteCommand> PS5RemoteCommands { get; set; }
@@ -118,6 +124,52 @@ public class GamingCafeContext : DbContext
             entity.HasKey(e => e.CommandId);
             entity.HasOne(e => e.Console)
                 .WithMany()
+                .HasForeignKey(e => e.ConsoleId);
+        });
+
+        // Modern Game Console Configuration
+        modelBuilder.Entity<GameConsole>(entity =>
+        {
+            entity.HasKey(e => e.ConsoleId);
+            entity.HasIndex(e => e.ConsoleName).IsUnique();
+            entity.Property(e => e.HourlyRate).HasColumnType("decimal(18,2)");
+            entity.HasOne(e => e.CurrentUser)
+                .WithMany()
+                .HasForeignKey(e => e.CurrentUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // Console Session Configuration
+        modelBuilder.Entity<ConsoleSession>(entity =>
+        {
+            entity.HasKey(e => e.SessionId);
+            entity.Property(e => e.HourlyRate).HasColumnType("decimal(18,2)");
+            entity.Property(e => e.TotalCost).HasColumnType("decimal(18,2)");
+            entity.HasOne(e => e.Console)
+                .WithMany(c => c.Sessions)
+                .HasForeignKey(e => e.ConsoleId);
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId);
+        });
+
+        // Console Remote Command Configuration
+        modelBuilder.Entity<ConsoleRemoteCommand>(entity =>
+        {
+            entity.HasKey(e => e.CommandId);
+            entity.HasOne(e => e.Console)
+                .WithMany(c => c.RemoteCommands)
+                .HasForeignKey(e => e.ConsoleId);
+        });
+
+        // Console Game Configuration
+        modelBuilder.Entity<ConsoleGame>(entity =>
+        {
+            entity.HasKey(e => e.GameId);
+            entity.Property(e => e.SizeGB).HasColumnType("decimal(10,2)");
+            entity.Property(e => e.DownloadProgress).HasColumnType("decimal(5,2)");
+            entity.HasOne(e => e.Console)
+                .WithMany(c => c.InstalledGames)
                 .HasForeignKey(e => e.ConsoleId);
         });
 
@@ -227,7 +279,7 @@ public class GamingCafeContext : DbContext
             new GameStation { StationId = 5, StationName = "PC-05", StationType = "PC", HourlyRate = 5.00m, Description = "High-end Gaming PC" }
         );
 
-        // Seed PS5 console
+        // Seed PS5 console (legacy)
         modelBuilder.Entity<PS5Console>().HasData(new PS5Console
         {
             ConsoleId = 1,
@@ -235,6 +287,160 @@ public class GamingCafeContext : DbContext
             Status = ConsoleStatus.Offline,
             CreatedAt = DateTime.UtcNow
         });
+
+        // Seed modern gaming consoles
+        modelBuilder.Entity<GameConsole>().HasData(
+            new GameConsole
+            {
+                ConsoleId = 1,
+                ConsoleName = "PlayStation5-01",
+                Type = ConsoleType.PlayStation5,
+                Model = "PS5 Standard",
+                FirmwareVersion = "8.03",
+                HourlyRate = 8.00m,
+                IsAvailable = true,
+                Status = ConsoleStatus.Offline,
+                CreatedAt = DateTime.UtcNow,
+                Notes = "Main PlayStation 5 console with 4K gaming"
+            },
+            new GameConsole
+            {
+                ConsoleId = 2,
+                ConsoleName = "XboxSeriesX-01",
+                Type = ConsoleType.XboxSeriesX,
+                Model = "Xbox Series X",
+                FirmwareVersion = "10.0.25398",
+                HourlyRate = 8.00m,
+                IsAvailable = true,
+                Status = ConsoleStatus.Offline,
+                CreatedAt = DateTime.UtcNow,
+                Notes = "Xbox Series X with Game Pass Ultimate"
+            },
+            new GameConsole
+            {
+                ConsoleId = 3,
+                ConsoleName = "NintendoSwitch-01",
+                Type = ConsoleType.NintendoSwitchOLED,
+                Model = "Switch OLED",
+                FirmwareVersion = "16.1.0",
+                HourlyRate = 6.00m,
+                IsAvailable = true,
+                Status = ConsoleStatus.Offline,
+                CreatedAt = DateTime.UtcNow,
+                Notes = "Nintendo Switch OLED with dock for TV play"
+            },
+            new GameConsole
+            {
+                ConsoleId = 4,
+                ConsoleName = "PlayStation4-01",
+                Type = ConsoleType.PlayStation4,
+                Model = "PS4 Pro",
+                FirmwareVersion = "11.00",
+                HourlyRate = 5.00m,
+                IsAvailable = true,
+                Status = ConsoleStatus.Offline,
+                CreatedAt = DateTime.UtcNow,
+                Notes = "PlayStation 4 Pro for budget gaming"
+            },
+            new GameConsole
+            {
+                ConsoleId = 5,
+                ConsoleName = "SteamDeck-01",
+                Type = ConsoleType.SteamDeck,
+                Model = "Steam Deck 512GB",
+                FirmwareVersion = "3.5.7",
+                HourlyRate = 7.00m,
+                IsAvailable = true,
+                Status = ConsoleStatus.Offline,
+                CreatedAt = DateTime.UtcNow,
+                Notes = "Portable PC gaming with Steam library"
+            }
+        );
+
+        // Seed sample console games
+        modelBuilder.Entity<ConsoleGame>().HasData(
+            // PlayStation 5 Games
+            new ConsoleGame
+            {
+                GameId = 1,
+                ConsoleId = 1,
+                GameTitle = "Spider-Man 2",
+                Genre = "Action/Adventure",
+                Rating = "T",
+                SizeGB = 98.5m,
+                Publisher = "Sony Interactive Entertainment",
+                Developer = "Insomniac Games",
+                Description = "Swing through NYC as Spider-Man in this thrilling adventure",
+                InstallDate = DateTime.UtcNow.AddDays(-30)
+            },
+            new ConsoleGame
+            {
+                GameId = 2,
+                ConsoleId = 1,
+                GameTitle = "God of War Ragnarök",
+                Genre = "Action/Adventure",
+                Rating = "M",
+                SizeGB = 90.6m,
+                Publisher = "Sony Interactive Entertainment",
+                Developer = "Santa Monica Studio",
+                Description = "Epic conclusion to the Norse saga of Kratos and Atreus",
+                InstallDate = DateTime.UtcNow.AddDays(-25)
+            },
+            // Xbox Series X Games
+            new ConsoleGame
+            {
+                GameId = 3,
+                ConsoleId = 2,
+                GameTitle = "Halo Infinite",
+                Genre = "FPS",
+                Rating = "T",
+                SizeGB = 48.4m,
+                Publisher = "Microsoft Studios",
+                Developer = "343 Industries",
+                Description = "Master Chief returns in this sci-fi shooter",
+                InstallDate = DateTime.UtcNow.AddDays(-20)
+            },
+            new ConsoleGame
+            {
+                GameId = 4,
+                ConsoleId = 2,
+                GameTitle = "Forza Horizon 5",
+                Genre = "Racing",
+                Rating = "E",
+                SizeGB = 103.0m,
+                Publisher = "Microsoft Studios",
+                Developer = "Playground Games",
+                Description = "Open-world racing across beautiful Mexico",
+                InstallDate = DateTime.UtcNow.AddDays(-35)
+            },
+            // Nintendo Switch Games
+            new ConsoleGame
+            {
+                GameId = 5,
+                ConsoleId = 3,
+                GameTitle = "The Legend of Zelda: Tears of the Kingdom",
+                Genre = "Action/Adventure",
+                Rating = "E10+",
+                SizeGB = 18.2m,
+                Publisher = "Nintendo",
+                Developer = "Nintendo EPD",
+                Description = "Epic adventure in the skies and depths of Hyrule",
+                InstallDate = DateTime.UtcNow.AddDays(-40)
+            },
+            new ConsoleGame
+            {
+                GameId = 6,
+                ConsoleId = 3,
+                GameTitle = "Super Mario Odyssey",
+                Genre = "Platformer",
+                Rating = "E10+",
+                SizeGB = 5.7m,
+                Publisher = "Nintendo",
+                Developer = "Nintendo EPD",
+                Description = "Join Mario on a 3D platforming adventure across kingdoms",
+                InstallDate = DateTime.UtcNow.AddDays(-50)
+            }
+        );
 
         // Seed default loyalty program
         modelBuilder.Entity<LoyaltyProgram>().HasData(new LoyaltyProgram
