@@ -1,0 +1,373 @@
+@page "/pos"
+@using GamingCafe.Core.Models
+@inject IJSRuntime JSRuntime
+
+<PageTitle>POS Management</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="h2 mb-0">
+                <i class="fas fa-cash-register me-2 text-primary"></i>
+                Point of Sale Management
+            </h1>
+            <p class="text-muted">Monitor transactions and manage POS system</p>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary" @onclick="LaunchPOSApp">
+                <i class="fas fa-external-link-alt me-2"></i>
+                Launch POS Desktop App
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="me-3">
+                            <i class="fas fa-dollar-sign fa-2x text-success"></i>
+                        </div>
+                        <div>
+                            <h5 class="card-title mb-0">$@todayRevenue.ToString("F2")</h5>
+                            <p class="card-text text-muted small">Today's Revenue</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="me-3">
+                            <i class="fas fa-receipt fa-2x text-info"></i>
+                        </div>
+                        <div>
+                            <h5 class="card-title mb-0">@todayTransactions</h5>
+                            <p class="card-text text-muted small">Today's Transactions</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="me-3">
+                            <i class="fas fa-chart-line fa-2x text-warning"></i>
+                        </div>
+                        <div>
+                            <h5 class="card-title mb-0">$@averageTransactionValue.ToString("F2")</h5>
+                            <p class="card-text text-muted small">Avg Transaction</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="me-3">
+                            <i class="fas fa-shopping-cart fa-2x text-danger"></i>
+                        </div>
+                        <div>
+                            <h5 class="card-title mb-0">@totalProducts</h5>
+                            <p class="card-text text-muted small">Available Products</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Transactions -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white border-bottom">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-history me-2"></i>
+                    Recent Transactions
+                </h5>
+                <button class="btn btn-outline-primary btn-sm" @onclick="RefreshData">
+                    <i class="fas fa-sync-alt me-1"></i>
+                    Refresh
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            @if (transactions == null)
+            {
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            }
+            else if (!transactions.Any())
+            {
+                <div class="text-center py-5">
+                    <i class="fas fa-receipt fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">No transactions found</p>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Transaction ID</th>
+                                <th>Date & Time</th>
+                                <th>User</th>
+                                <th>Type</th>
+                                <th>Amount</th>
+                                <th>Payment Method</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var transaction in transactions.Take(20))
+                            {
+                                <tr>
+                                    <td>
+                                        <code>#@transaction.TransactionId</code>
+                                    </td>
+                                    <td>
+                                        @transaction.CreatedAt.ToString("MMM dd, yyyy HH:mm")
+                                    </td>
+                                    <td>
+                                        @if (transaction.User != null)
+                                        {
+                                            <span>@transaction.User.Username</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">Guest</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (transaction.Type == TransactionType.Product)
+                                        {
+                                            <span class="badge bg-success">Product Sale</span>
+                                        }
+                                        else if (transaction.Type == TransactionType.GameTime)
+                                        {
+                                            <span class="badge bg-info">Game Time</span>
+                                        }
+                                        else if (transaction.Type == TransactionType.Refund)
+                                        {
+                                            <span class="badge bg-warning">Refund</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">@transaction.Type</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <strong class="@(transaction.Amount >= 0 ? "text-success" : "text-danger")">
+                                            @(transaction.Amount >= 0 ? "+" : "")$@transaction.Amount.ToString("F2")
+                                        </strong>
+                                    </td>
+                                    <td>
+                                        @switch (transaction.PaymentMethod)
+                                        {
+                                            case PaymentMethod.Cash:
+                                                <i class="fas fa-money-bill text-success me-1"></i><text> Cash</text>
+                                                break;
+                                            case PaymentMethod.CreditCard:
+                                                <i class="fas fa-credit-card text-primary me-1"></i><text> Card</text>
+                                                break;
+                                            case PaymentMethod.Wallet:
+                                                <i class="fas fa-wallet text-warning me-1"></i><text> Wallet</text>
+                                                break;
+                                            default:
+                                                @transaction.PaymentMethod
+                                                break;
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-success">Completed</span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- POS System Information -->
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom">
+                    <h5 class="mb-0">
+                        <i class="fas fa-desktop me-2"></i>
+                        Desktop POS Application
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">
+                        The Point of Sale desktop application runs independently for cashier operations.
+                        Launch the POS app to handle transactions, product sales, and customer payments.
+                    </p>
+                    <ul class="list-unstyled">
+                        <li class="mb-2">
+                            <i class="fas fa-check text-success me-2"></i>
+                            Process product sales
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-check text-success me-2"></i>
+                            Handle game time purchases
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-check text-success me-2"></i>
+                            Accept multiple payment methods
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-check text-success me-2"></i>
+                            Real-time inventory updates
+                        </li>
+                    </ul>
+                    <button class="btn btn-primary" @onclick="LaunchPOSApp">
+                        <i class="fas fa-rocket me-2"></i>
+                        Launch POS Desktop App
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom">
+                    <h5 class="mb-0">
+                        <i class="fas fa-cog me-2"></i>
+                        Quick Actions
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-primary" @onclick="RefreshData">
+                            <i class="fas fa-sync-alt me-2"></i>
+                            Refresh Transaction Data
+                        </button>
+                        <button class="btn btn-outline-success" @onclick="ExportTransactions">
+                            <i class="fas fa-file-export me-2"></i>
+                            Export Today's Transactions
+                        </button>
+                        <button class="btn btn-outline-info" @onclick="ViewInventory">
+                            <i class="fas fa-boxes me-2"></i>
+                            View Inventory Status
+                        </button>
+                        <button class="btn btn-outline-warning" @onclick="ViewReports">
+                            <i class="fas fa-chart-bar me-2"></i>
+                            View Sales Reports
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<Transaction> transactions = new();
+    private decimal todayRevenue = 0;
+    private int todayTransactions = 0;
+    private decimal averageTransactionValue = 0;
+    private int totalProducts = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            // Generate sample transaction data for demonstration
+            GenerateSampleData();
+        }
+        catch (Exception ex)
+        {
+            // Handle error
+            Console.WriteLine($"Error loading POS data: {ex.Message}");
+        }
+    }
+
+    private void GenerateSampleData()
+    {
+        var random = new Random();
+        var today = DateTime.Today;
+        
+        transactions = new List<Transaction>();
+        
+        // Generate sample transactions for today
+        for (int i = 0; i < 15; i++)
+        {
+            var transaction = new Transaction
+            {
+                TransactionId = 1000 + i,
+                CreatedAt = today.AddHours(random.Next(8, 22)).AddMinutes(random.Next(0, 59)),
+                Amount = (decimal)(random.NextDouble() * 50 + 5), // $5-$55
+                Type = (TransactionType)random.Next(0, 3),
+                PaymentMethod = (PaymentMethod)random.Next(0, 3),
+                Description = $"Sample transaction {i + 1}",
+                User = i % 3 == 0 ? null : new User 
+                { 
+                    Username = $"user{i + 1}",
+                    Email = $"user{i + 1}@example.com"
+                }
+            };
+            
+            transactions.Add(transaction);
+        }
+        
+        // Calculate stats
+        var todayTransactionsList = transactions.Where(t => t.CreatedAt.Date == today).ToList();
+        todayRevenue = todayTransactionsList.Sum(t => t.Amount);
+        todayTransactions = todayTransactionsList.Count;
+        averageTransactionValue = todayTransactions > 0 ? todayRevenue / todayTransactions : 0;
+        totalProducts = 25; // Sample count
+        
+        // Sort by date descending
+        transactions = transactions.OrderByDescending(t => t.CreatedAt).ToList();
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadData();
+        StateHasChanged();
+    }
+
+    private async Task LaunchPOSApp()
+    {
+        await JSRuntime.InvokeVoidAsync("alert", 
+            "To launch the POS Desktop Application, run this command in a terminal:\n\n" +
+            "dotnet run --project src/GamingCafe.POS/GamingCafe.POS.csproj\n\n" +
+            "The POS app will open in a new window for cashier operations.");
+    }
+
+    private async Task ExportTransactions()
+    {
+        await JSRuntime.InvokeVoidAsync("alert", "Export functionality would be implemented here.");
+    }
+
+    private void ViewInventory()
+    {
+        // Navigate to inventory page
+        // NavigationManager.NavigateTo("/inventory");
+    }
+
+    private void ViewReports()
+    {
+        // Navigate to reports page
+        // NavigationManager.NavigateTo("/reports");
+    }
+}

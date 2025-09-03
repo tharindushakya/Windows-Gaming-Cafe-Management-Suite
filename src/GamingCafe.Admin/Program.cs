@@ -8,6 +8,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// Add HttpClient for Blazor components
+builder.Services.AddHttpClient();
+
 // Configure Entity Framework
 builder.Services.AddDbContext<GamingCafeContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
