@@ -1,0 +1,270 @@
+@page "/sessions"
+@using GamingCafe.Core.Models
+@using GamingCafe.Data
+@using Microsoft.EntityFrameworkCore
+@inject GamingCafeContext DbContext
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Gaming Sessions</PageTitle>
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Gaming Sessions</h1>
+        <button class="btn btn-primary" @onclick="ShowAddSessionModal">
+            <i class="fas fa-plus"></i> Start Session
+        </button>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Active Sessions</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">@(sessions?.Count(s => s.Status == SessionStatus.Active) ?? 0)</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-play fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Today's Sessions</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">@(sessions?.Count(s => s.StartTime.Date == DateTime.Today) ?? 0)</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-calendar-day fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Total Revenue</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">$@(sessions?.Where(s => s.IsPaid).Sum(s => s.TotalCost).ToString("F2") ?? "0.00")</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Pending Payment</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">@(sessions?.Count(s => !s.IsPaid && s.Status == SessionStatus.Completed) ?? 0)</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-exclamation-triangle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sessions Table -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">All Gaming Sessions</h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>Session ID</th>
+                            <th>User</th>
+                            <th>Station</th>
+                            <th>Start Time</th>
+                            <th>End Time</th>
+                            <th>Duration</th>
+                            <th>Cost</th>
+                            <th>Status</th>
+                            <th>Payment</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (sessions == null)
+                        {
+                            <tr>
+                                <td colspan="10" class="text-center">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="sr-only">Loading...</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var session in sessions)
+                            {
+                                <tr>
+                                    <td>@session.SessionId</td>
+                                    <td>@(session.User?.Username ?? "Unknown")</td>
+                                    <td>@(session.Station?.StationName ?? "Unknown")</td>
+                                    <td>@session.StartTime.ToString("MM/dd/yyyy HH:mm")</td>
+                                    <td>@(session.EndTime?.ToString("MM/dd/yyyy HH:mm") ?? "Active")</td>
+                                    <td>
+                                        @if (session.EndTime.HasValue)
+                                        {
+                                            var duration = session.EndTime.Value - session.StartTime;
+                                            @($"{duration.Hours}h {duration.Minutes}m")
+                                        }
+                                        else
+                                        {
+                                            var duration = DateTime.Now - session.StartTime;
+                                            @($"{duration.Hours}h {duration.Minutes}m (running)")
+                                        }
+                                    </td>
+                                    <td>$@session.TotalCost.ToString("F2")</td>
+                                    <td>
+                                        <span class="badge badge-@(GetStatusBadgeClass(session.Status))">
+                                            @session.Status
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge badge-@(session.IsPaid ? "success" : "warning")">
+                                            @(session.IsPaid ? "Paid" : "Pending")
+                                        </span>
+                                    </td>
+                                    <td>
+                                        @if (session.Status == SessionStatus.Active)
+                                        {
+                                            <button class="btn btn-sm btn-warning me-1" @onclick="() => EndSession(session)">
+                                                <i class="fas fa-stop"></i> End
+                                            </button>
+                                        }
+                                        @if (!session.IsPaid)
+                                        {
+                                            <button class="btn btn-sm btn-success me-1" @onclick="() => MarkAsPaid(session)">
+                                                <i class="fas fa-check"></i> Mark Paid
+                                            </button>
+                                        }
+                                        <button class="btn btn-sm btn-info" @onclick="() => ViewSessionDetails(session)">
+                                            <i class="fas fa-eye"></i> View
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<GameSession>? sessions;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSessions();
+    }
+
+    private async Task LoadSessions()
+    {
+        sessions = DbContext.GameSessions
+            .Include(s => s.User)
+            .Include(s => s.Station)
+            .OrderByDescending(s => s.StartTime)
+            .Take(100) // Limit to last 100 sessions for performance
+            .ToList();
+    }
+
+    private string GetStatusBadgeClass(SessionStatus status)
+    {
+        return status switch
+        {
+            SessionStatus.Active => "success",
+            SessionStatus.Paused => "warning",
+            SessionStatus.Completed => "primary",
+            SessionStatus.Cancelled => "danger",
+            _ => "secondary"
+        };
+    }
+
+    private async Task ShowAddSessionModal()
+    {
+        await JSRuntime.InvokeVoidAsync("alert", "Start Session functionality coming soon!");
+    }
+
+    private async Task EndSession(GameSession session)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"End session for {session.User?.Username} on {session.Station?.StationName}?");
+        if (confirmed)
+        {
+            session.EndTime = DateTime.Now;
+            session.Status = SessionStatus.Completed;
+            
+            // Calculate total cost based on duration
+            var duration = session.EndTime.Value - session.StartTime;
+            var hours = (decimal)duration.TotalHours;
+            session.TotalCost = Math.Round(hours * session.HourlyRate, 2);
+
+            // Free up the station
+            if (session.Station != null)
+            {
+                session.Station.IsAvailable = true;
+                session.Station.CurrentUserId = null;
+                session.Station.SessionStartTime = null;
+            }
+
+            await DbContext.SaveChangesAsync();
+            await LoadSessions();
+            StateHasChanged();
+        }
+    }
+
+    private async Task MarkAsPaid(GameSession session)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Mark session as paid? Amount: ${session.TotalCost:F2}");
+        if (confirmed)
+        {
+            session.IsPaid = true;
+            await DbContext.SaveChangesAsync();
+            await LoadSessions();
+            StateHasChanged();
+        }
+    }
+
+    private async Task ViewSessionDetails(GameSession session)
+    {
+        var details = $"Session Details:\n" +
+                     $"User: {session.User?.Username ?? "Unknown"}\n" +
+                     $"Station: {session.Station?.StationName ?? "Unknown"}\n" +
+                     $"Start: {session.StartTime:MM/dd/yyyy HH:mm}\n" +
+                     $"End: {session.EndTime?.ToString("MM/dd/yyyy HH:mm") ?? "Active"}\n" +
+                     $"Cost: ${session.TotalCost:F2}\n" +
+                     $"Status: {session.Status}\n" +
+                     $"Paid: {(session.IsPaid ? "Yes" : "No")}\n" +
+                     $"Notes: {session.Notes}";
+        
+        await JSRuntime.InvokeVoidAsync("alert", details);
+    }
+}

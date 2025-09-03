@@ -1,0 +1,56 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace GamingCafe.Core.Models;
+
+public class User
+{
+    public int UserId { get; set; }
+
+    [Required]
+    [StringLength(50)]
+    public string Username { get; set; } = string.Empty;
+
+    [Required]
+    [EmailAddress]
+    [StringLength(100)]
+    public string Email { get; set; } = string.Empty;
+
+    [Required]
+    public string PasswordHash { get; set; } = string.Empty;
+
+    [StringLength(100)]
+    public string FirstName { get; set; } = string.Empty;
+
+    [StringLength(100)]
+    public string LastName { get; set; } = string.Empty;
+
+    [StringLength(20)]
+    public string PhoneNumber { get; set; } = string.Empty;
+
+    public DateTime DateOfBirth { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? LastLoginAt { get; set; }
+    public bool IsActive { get; set; } = true;
+    public UserRole Role { get; set; } = UserRole.Customer;
+
+    // Wallet and Loyalty
+    public decimal WalletBalance { get; set; } = 0;
+    public int LoyaltyPoints { get; set; } = 0;
+    public DateTime? MembershipExpiryDate { get; set; }
+
+    // Navigation properties
+    public virtual ICollection<GameSession> GameSessions { get; set; } = new List<GameSession>();
+    public virtual ICollection<Reservation> Reservations { get; set; } = new List<Reservation>();
+    public virtual ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();
+    public virtual ICollection<WalletTransaction> WalletTransactions { get; set; } = new List<WalletTransaction>();
+    public virtual ICollection<LoyaltyRedemption> LoyaltyRedemptions { get; set; } = new List<LoyaltyRedemption>();
+    public virtual ICollection<PS5Session> PS5Sessions { get; set; } = new List<PS5Session>();
+}
+
+public enum UserRole
+{
+    Customer = 0,
+    Staff = 1,
+    Manager = 2,
+    Admin = 3
+}

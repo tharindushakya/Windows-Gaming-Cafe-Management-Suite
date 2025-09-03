@@ -1,0 +1,299 @@
+@page "/reports"
+@using GamingCafe.Core.Models
+@using GamingCafe.Data
+@using Microsoft.EntityFrameworkCore
+@inject GamingCafeContext DbContext
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Reports & Analytics</PageTitle>
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Reports & Analytics</h1>
+        <div>
+            <button class="btn btn-outline-primary me-2" @onclick="ExportReport">
+                <i class="fas fa-download"></i> Export Report
+            </button>
+            <button class="btn btn-primary" @onclick="RefreshData">
+                <i class="fas fa-refresh"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Date Range Filter -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title">Date Range</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label for="startDate" class="form-label">Start Date</label>
+                            <input type="date" class="form-control" id="startDate" @bind="startDate" />
+                        </div>
+                        <div class="col-md-6">
+                            <label for="endDate" class="form-label">End Date</label>
+                            <input type="date" class="form-control" id="endDate" @bind="endDate" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Revenue Stats -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Total Revenue</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">$@totalRevenue.ToString("F2")</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Gaming Revenue</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">$@gamingRevenue.ToString("F2")</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-gamepad fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Product Sales</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">$@productRevenue.ToString("F2")</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-shopping-cart fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Total Sessions</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">@totalSessions</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clock fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Station Usage Chart -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Station Usage</h6>
+                </div>
+                <div class="card-body">
+                    <canvas id="stationChart" width="100" height="50"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Revenue Trend -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Revenue Trend</h6>
+                </div>
+                <div class="card-body">
+                    <canvas id="revenueChart" width="100" height="50"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Top Products -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Top Selling Products</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Sold</th>
+                                    <th>Revenue</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (topProducts != null)
+                                {
+                                    @foreach (var item in topProducts.Take(5))
+                                    {
+                                        <tr>
+                                            <td>@item.Name</td>
+                                            <td>@item.SoldQuantity</td>
+                                            <td>$@item.Revenue.ToString("F2")</td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Transactions -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Recent Transactions</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Type</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (recentTransactions != null)
+                                {
+                                    @foreach (var transaction in recentTransactions.Take(10))
+                                    {
+                                        <tr>
+                                            <td>@transaction.CreatedAt.ToString("MM/dd HH:mm")</td>
+                                            <td>@transaction.Type</td>
+                                            <td>$@transaction.Amount.ToString("F2")</td>
+                                            <td>
+                                                <span class="badge badge-@(transaction.Status == TransactionStatus.Completed ? "success" : "warning")">
+                                                    @transaction.Status
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private DateTime startDate = DateTime.Today.AddDays(-30);
+    private DateTime endDate = DateTime.Today;
+    
+    private decimal totalRevenue = 0;
+    private decimal gamingRevenue = 0;
+    private decimal productRevenue = 0;
+    private int totalSessions = 0;
+    
+    private List<ProductSummary>? topProducts;
+    private List<Transaction>? recentTransactions;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadReportData();
+    }
+
+    private async Task LoadReportData()
+    {
+        var sessions = DbContext.GameSessions
+            .Where(s => s.StartTime >= startDate && s.StartTime <= endDate.AddDays(1))
+            .ToList();
+
+        var transactions = DbContext.Transactions
+            .Where(t => t.CreatedAt >= startDate && t.CreatedAt <= endDate.AddDays(1))
+            .Include(t => t.Product)
+            .ToList();
+
+        // Calculate metrics
+        gamingRevenue = sessions.Where(s => s.IsPaid).Sum(s => s.TotalCost);
+        productRevenue = transactions
+            .Where(t => t.Type == TransactionType.Product && t.Status == TransactionStatus.Completed)
+            .Sum(t => t.Amount);
+        totalRevenue = gamingRevenue + productRevenue;
+        totalSessions = sessions.Count;
+
+        // Top products
+        topProducts = transactions
+            .Where(t => t.Product != null && t.Type == TransactionType.Product)
+            .GroupBy(t => t.Product!)
+            .Select(g => new ProductSummary
+            {
+                Name = g.Key.Name,
+                SoldQuantity = g.Count(),
+                Revenue = g.Sum(t => t.Amount)
+            })
+            .OrderByDescending(p => p.Revenue)
+            .ToList();
+
+        // Recent transactions
+        recentTransactions = DbContext.Transactions
+            .OrderByDescending(t => t.CreatedAt)
+            .Take(10)
+            .ToList();
+    }
+
+    private async Task FilterDataByDate()
+    {
+        await LoadReportData();
+        StateHasChanged();
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadReportData();
+        StateHasChanged();
+    }
+
+    private async Task ExportReport()
+    {
+        await JSRuntime.InvokeVoidAsync("alert", "Export functionality coming soon!");
+    }
+
+    public class ProductSummary
+    {
+        public string Name { get; set; } = "";
+        public int SoldQuantity { get; set; }
+        public decimal Revenue { get; set; }
+    }
+}
