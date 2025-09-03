@@ -12,8 +12,8 @@ builder.Services.AddRazorComponents()
 // Add HttpClient for Blazor components
 builder.Services.AddHttpClient();
 
-// Configure Entity Framework
-builder.Services.AddDbContext<GamingCafeContext>(options =>
+// Configure Entity Framework with DbContextFactory for thread safety
+builder.Services.AddDbContextFactory<GamingCafeContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // Add custom services

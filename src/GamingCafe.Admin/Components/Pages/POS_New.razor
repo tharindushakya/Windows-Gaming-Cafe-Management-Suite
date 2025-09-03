@@ -97,19 +97,19 @@
                     <ul class="nav nav-tabs card-header-tabs" role="tablist">
                         <li class="nav-item">
                             <a class="nav-link @(activeTab == "transactions" ? "active" : "")" 
-                               @onclick="() => SetActiveTab(\"transactions\")" href="#" role="tab">
+                               @onclick='() => SetActiveTab("transactions")' href="#" role="tab">
                                 <i class="fas fa-receipt me-1"></i> Transactions
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link @(activeTab == "products" ? "active" : "")" 
-                               @onclick="() => SetActiveTab(\"products\")" href="#" role="tab">
+                               @onclick='() => SetActiveTab("products")' href="#" role="tab">
                                 <i class="fas fa-shopping-cart me-1"></i> Products
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link @(activeTab == "stations" ? "active" : "")" 
-                               @onclick="() => SetActiveTab(\"stations\")" href="#" role="tab">
+                               @onclick='() => SetActiveTab("stations")' href="#" role="tab">
                                 <i class="fas fa-desktop me-1"></i> Stations
                             </a>
                         </li>
@@ -122,7 +122,7 @@
                             <h5 class="mb-0">Recent Transactions</h5>
                             <div class="d-flex gap-2">
                                 <input type="date" class="form-control form-control-sm" style="width: auto;" 
-                                       @bind="selectedDate" @onchange="LoadTransactions" />
+                                       @bind="selectedDate" @bind:event="onchange" />
                                 <button class="btn btn-outline-primary btn-sm" @onclick="LoadTransactions">
                                     <i class="fas fa-sync-alt me-1"></i> Refresh
                                 </button>
@@ -325,7 +325,7 @@
                                                 <div class="d-flex justify-content-between align-items-center">
                                                     <div>
                                                         <strong>@station.StationName</strong>
-                                                        <span class="badge bg-@GetStationStatusColor(station.Status) ms-2">@station.Status</span>
+                                                        <span class="badge bg-@GetStationStatusColor(station.IsAvailable) ms-2">@(station.IsAvailable ? "Available" : "Occupied")</span>
                                                     </div>
                                                     <div class="btn-group btn-group-sm">
                                                         <button class="btn btn-outline-primary" @onclick="() => EditStation(station)">
@@ -365,7 +365,7 @@
                                                         <button class="btn btn-outline-primary" @onclick="() => EditConsole(console)">
                                                             <i class="fas fa-edit"></i>
                                                         </button>
-                                                        <button class="btn btn-outline-danger" @onclick="() => DeleteConsole(console.Id)">
+                                                        <button class="btn btn-outline-danger" @onclick="() => DeleteConsole(console.ConsoleId)">
                                                             <i class="fas fa-trash"></i>
                                                         </button>
                                                     </div>
@@ -558,7 +558,7 @@
             var station = new GameStation
             {
                 StationName = stationName,
-                Status = StationStatus.Available,
+                IsAvailable = true,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -587,7 +587,7 @@
             {
                 ConsoleName = consoleName,
                 Model = model,
-                Status = ConsoleStatus.Available,
+                Status = ConsoleStatus.Online,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -655,24 +655,17 @@
     // Helper methods for styling
     private string GetTransactionTypeBadgeColor(TransactionType type) => type switch
     {
-        TransactionType.Sale => "success",
+        TransactionType.Product => "success",
         TransactionType.Refund => "danger",
         TransactionType.GameTime => "info",
         _ => "secondary"
     };
 
-    private string GetStationStatusColor(StationStatus status) => status switch
-    {
-        StationStatus.Available => "success",
-        StationStatus.Occupied => "warning",
-        StationStatus.Maintenance => "danger",
-        StationStatus.OutOfOrder => "dark",
-        _ => "secondary"
-    };
+    private string GetStationStatusColor(bool isAvailable) => isAvailable ? "success" : "warning";
 
     private string GetConsoleStatusColor(ConsoleStatus status) => status switch
     {
-        ConsoleStatus.Available => "success",
+        ConsoleStatus.Online => "success",
         ConsoleStatus.InUse => "warning",
         ConsoleStatus.Maintenance => "danger",
         ConsoleStatus.Updating => "info",

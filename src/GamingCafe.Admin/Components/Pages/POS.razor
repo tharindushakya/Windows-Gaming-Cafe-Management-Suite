@@ -1,7 +1,6 @@
 @page "/pos"
 @using GamingCafe.Core.Models
 @using GamingCafe.Admin.Services
-@using Microsoft.AspNetCore.Components.Web
 @inject IPOSService POSService
 @inject IStationService StationService
 @inject IJSRuntime JSRuntime
@@ -123,7 +122,7 @@
                             <h5 class="mb-0">Recent Transactions</h5>
                             <div class="d-flex gap-2">
                                 <input type="date" class="form-control form-control-sm" style="width: auto;" 
-                                       value="@selectedDate.ToString("yyyy-MM-dd")" @onchange="OnDateChanged" />
+                                       @bind="selectedDate" @bind:event="onchange" />
                                 <button class="btn btn-outline-primary btn-sm" @onclick="LoadTransactions">
                                     <i class="fas fa-sync-alt me-1"></i> Refresh
                                 </button>
@@ -326,9 +325,7 @@
                                                 <div class="d-flex justify-content-between align-items-center">
                                                     <div>
                                                         <strong>@station.StationName</strong>
-                                                        <span class="badge bg-@GetStationStatusColor(station.IsAvailable) ms-2">
-                                                            @(station.IsAvailable ? "Available" : "Occupied")
-                                                        </span>
+                                                        <span class="badge bg-@GetStationStatusColor(station.IsAvailable) ms-2">@(station.IsAvailable ? "Available" : "Occupied")</span>
                                                     </div>
                                                     <div class="btn-group btn-group-sm">
                                                         <button class="btn btn-outline-primary" @onclick="() => EditStation(station)">
@@ -462,15 +459,6 @@
         StateHasChanged();
     }
 
-    private async Task OnDateChanged(ChangeEventArgs e)
-    {
-        if (DateTime.TryParse(e.Value?.ToString(), out var newDate))
-        {
-            selectedDate = newDate;
-            await LoadTransactions();
-        }
-    }
-
     private async Task LaunchPOSApp()
     {
         await JSRuntime.InvokeVoidAsync("alert", 
@@ -571,7 +559,6 @@
             {
                 StationName = stationName,
                 IsAvailable = true,
-                IsActive = true,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -601,7 +588,6 @@
                 ConsoleName = consoleName,
                 Model = model,
                 Status = ConsoleStatus.Online,
-                IsAvailable = true,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -672,12 +658,10 @@
         TransactionType.Product => "success",
         TransactionType.Refund => "danger",
         TransactionType.GameTime => "info",
-        TransactionType.WalletTopup => "primary",
-        TransactionType.LoyaltyRedemption => "warning",
         _ => "secondary"
     };
 
-    private string GetStationStatusColor(bool isAvailable) => isAvailable ? "success" : "danger";
+    private string GetStationStatusColor(bool isAvailable) => isAvailable ? "success" : "warning";
 
     private string GetConsoleStatusColor(ConsoleStatus status) => status switch
     {
@@ -685,7 +669,6 @@
         ConsoleStatus.InUse => "warning",
         ConsoleStatus.Maintenance => "danger",
         ConsoleStatus.Updating => "info",
-        ConsoleStatus.Offline => "dark",
         _ => "secondary"
     };
 }

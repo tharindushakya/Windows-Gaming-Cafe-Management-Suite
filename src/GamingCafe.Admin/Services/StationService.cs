@@ -25,30 +25,33 @@ public interface IStationService
 
 public class StationService : IStationService
 {
-    private readonly GamingCafeContext _context;
+    private readonly IDbContextFactory<GamingCafeContext> _contextFactory;
 
-    public StationService(GamingCafeContext context)
+    public StationService(IDbContextFactory<GamingCafeContext> contextFactory)
     {
-        _context = context;
+        _contextFactory = contextFactory;
     }
 
     public async Task<List<GameStation>> GetGameStationsAsync()
     {
-        return await _context.GameStations
+        using var context = await _contextFactory.CreateDbContextAsync();
+        return await context.GameStations
             .OrderBy(s => s.StationName)
             .ToListAsync();
     }
 
     public async Task<List<GameConsole>> GetGameConsolesAsync()
     {
-        return await _context.GameConsoles
+        using var context = await _contextFactory.CreateDbContextAsync();
+        return await context.GameConsoles
             .OrderBy(c => c.ConsoleName)
             .ToListAsync();
     }
 
     public async Task<GameStation> GetGameStationByIdAsync(int id)
     {
-        var station = await _context.GameStations.FindAsync(id);
+        using var context = await _contextFactory.CreateDbContextAsync();
+        var station = await context.GameStations.FindAsync(id);
         if (station == null)
             throw new ArgumentException($"Game station with ID {id} not found");
         
@@ -57,7 +60,8 @@ public class StationService : IStationService
 
     public async Task<GameConsole> GetGameConsoleByIdAsync(int id)
     {
-        var console = await _context.GameConsoles.FindAsync(id);
+        using var context = await _contextFactory.CreateDbContextAsync();
+        var console = await context.GameConsoles.FindAsync(id);
         if (console == null)
             throw new ArgumentException($"Game console with ID {id} not found");
         
@@ -66,57 +70,64 @@ public class StationService : IStationService
 
     public async Task<GameStation> CreateGameStationAsync(GameStation station)
     {
-        _context.GameStations.Add(station);
-        await _context.SaveChangesAsync();
+        using var context = await _contextFactory.CreateDbContextAsync();
+        context.GameStations.Add(station);
+        await context.SaveChangesAsync();
         return station;
     }
 
     public async Task<GameConsole> CreateGameConsoleAsync(GameConsole console)
     {
-        _context.GameConsoles.Add(console);
-        await _context.SaveChangesAsync();
+        using var context = await _contextFactory.CreateDbContextAsync();
+        context.GameConsoles.Add(console);
+        await context.SaveChangesAsync();
         return console;
     }
 
     public async Task<GameStation> UpdateGameStationAsync(GameStation station)
     {
-        _context.GameStations.Update(station);
-        await _context.SaveChangesAsync();
+        using var context = await _contextFactory.CreateDbContextAsync();
+        context.GameStations.Update(station);
+        await context.SaveChangesAsync();
         return station;
     }
 
     public async Task<GameConsole> UpdateGameConsoleAsync(GameConsole console)
     {
-        _context.GameConsoles.Update(console);
-        await _context.SaveChangesAsync();
+        using var context = await _contextFactory.CreateDbContextAsync();
+        context.GameConsoles.Update(console);
+        await context.SaveChangesAsync();
         return console;
     }
 
     public async Task<bool> DeleteGameStationAsync(int id)
     {
-        var station = await _context.GameStations.FindAsync(id);
+        using var context = await _contextFactory.CreateDbContextAsync();
+        var station = await context.GameStations.FindAsync(id);
         if (station == null)
             return false;
 
-        _context.GameStations.Remove(station);
-        await _context.SaveChangesAsync();
+        context.GameStations.Remove(station);
+        await context.SaveChangesAsync();
         return true;
     }
 
     public async Task<bool> DeleteGameConsoleAsync(int id)
     {
-        var console = await _context.GameConsoles.FindAsync(id);
+        using var context = await _contextFactory.CreateDbContextAsync();
+        var console = await context.GameConsoles.FindAsync(id);
         if (console == null)
             return false;
 
-        _context.GameConsoles.Remove(console);
-        await _context.SaveChangesAsync();
+        context.GameConsoles.Remove(console);
+        await context.SaveChangesAsync();
         return true;
     }
 
     public async Task<List<GameSession>> GetActiveSessionsAsync()
     {
-        return await _context.GameSessions
+        using var context = await _contextFactory.CreateDbContextAsync();
+        return await context.GameSessions
             .Include(s => s.User)
             .Where(s => s.EndTime == null)
             .OrderByDescending(s => s.StartTime)
@@ -125,7 +136,8 @@ public class StationService : IStationService
 
     public async Task<List<ConsoleSession>> GetActiveConsoleSessionsAsync()
     {
-        return await _context.ConsoleSessions
+        using var context = await _contextFactory.CreateDbContextAsync();
+        return await context.ConsoleSessions
             .Include(s => s.User)
             .Where(s => s.EndTime == null)
             .OrderByDescending(s => s.StartTime)
@@ -134,38 +146,41 @@ public class StationService : IStationService
 
     public async Task<bool> EndSessionAsync(int sessionId)
     {
-        var session = await _context.GameSessions.FindAsync(sessionId);
+        using var context = await _contextFactory.CreateDbContextAsync();
+        var session = await context.GameSessions.FindAsync(sessionId);
         if (session == null || session.EndTime != null)
             return false;
 
         session.EndTime = DateTime.UtcNow;
         session.Status = SessionStatus.Completed;
         
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync();
         return true;
     }
 
     public async Task<bool> EndConsoleSessionAsync(int sessionId)
     {
-        var session = await _context.ConsoleSessions.FindAsync(sessionId);
+        using var context = await _contextFactory.CreateDbContextAsync();
+        var session = await context.ConsoleSessions.FindAsync(sessionId);
         if (session == null || session.EndTime != null)
             return false;
 
         session.EndTime = DateTime.UtcNow;
         session.Status = SessionStatus.Completed;
         
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync();
         return true;
     }
 
     public async Task<StationStats> GetStationStatsAsync()
     {
-        var totalStations = await _context.GameStations.CountAsync();
-        var totalConsoles = await _context.GameConsoles.CountAsync();
-        var activeStations = await _context.GameStations.CountAsync(s => !s.IsAvailable);
-        var activeConsoles = await _context.GameConsoles.CountAsync(c => c.Status == ConsoleStatus.InUse);
-        var activeSessions = await _context.GameSessions.CountAsync(s => s.EndTime == null);
-        var activeConsoleSessions = await _context.ConsoleSessions.CountAsync(s => s.EndTime == null);
+        using var context = await _contextFactory.CreateDbContextAsync();
+        var totalStations = await context.GameStations.CountAsync();
+        var totalConsoles = await context.GameConsoles.CountAsync();
+        var activeStations = await context.GameStations.CountAsync(s => !s.IsAvailable);
+        var activeConsoles = await context.GameConsoles.CountAsync(c => c.Status == ConsoleStatus.InUse);
+        var activeSessions = await context.GameSessions.CountAsync(s => s.EndTime == null);
+        var activeConsoleSessions = await context.ConsoleSessions.CountAsync(s => s.EndTime == null);
 
         return new StationStats
         {

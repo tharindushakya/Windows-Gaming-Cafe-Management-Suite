@@ -18,16 +18,17 @@ public interface IPOSService
 
 public class POSService : IPOSService
 {
-    private readonly GamingCafeContext _context;
+    private readonly IDbContextFactory<GamingCafeContext> _contextFactory;
 
-    public POSService(GamingCafeContext context)
+    public POSService(IDbContextFactory<GamingCafeContext> contextFactory)
     {
-        _context = context;
+        _contextFactory = contextFactory;
     }
 
     public async Task<List<Transaction>> GetTransactionsAsync(DateTime? date = null)
     {
-        var query = _context.Transactions
+        using var context = await _contextFactory.CreateDbContextAsync();
+        var query = context.Transactions
             .Include(t => t.User)
             .AsQueryable();
 
@@ -44,14 +45,16 @@ public class POSService : IPOSService
 
     public async Task<List<Product>> GetProductsAsync()
     {
-        return await _context.Products
+        using var context = await _contextFactory.CreateDbContextAsync();
+        return await context.Products
             .OrderBy(p => p.Name)
             .ToListAsync();
     }
 
     public async Task<Product> GetProductByIdAsync(int id)
     {
-        var product = await _context.Products.FindAsync(id);
+        using var context = await _contextFactory.CreateDbContextAsync();
+        var product = await context.Products.FindAsync(id);
         if (product == null)
             throw new ArgumentException($"Product with ID {id} not found");
         
@@ -60,38 +63,42 @@ public class POSService : IPOSService
 
     public async Task<Product> CreateProductAsync(Product product)
     {
-        _context.Products.Add(product);
-        await _context.SaveChangesAsync();
+        using var context = await _contextFactory.CreateDbContextAsync();
+        context.Products.Add(product);
+        await context.SaveChangesAsync();
         return product;
     }
 
     public async Task<Product> UpdateProductAsync(Product product)
     {
-        _context.Products.Update(product);
-        await _context.SaveChangesAsync();
+        using var context = await _contextFactory.CreateDbContextAsync();
+        context.Products.Update(product);
+        await context.SaveChangesAsync();
         return product;
     }
 
     public async Task<bool> DeleteProductAsync(int id)
     {
-        var product = await _context.Products.FindAsync(id);
+        using var context = await _contextFactory.CreateDbContextAsync();
+        var product = await context.Products.FindAsync(id);
         if (product == null)
             return false;
 
-        _context.Products.Remove(product);
-        await _context.SaveChangesAsync();
+        context.Products.Remove(product);
+        await context.SaveChangesAsync();
         return true;
     }
 
     public async Task<POSStats> GetPOSStatsAsync(DateTime? date = null)
     {
+        using var context = await _contextFactory.CreateDbContextAsync();
         var targetDate = date ?? DateTime.Today;
         
-        var transactions = await _context.Transactions
+        var transactions = await context.Transactions
             .Where(t => t.CreatedAt.Date == targetDate.Date)
             .ToListAsync();
 
-        var totalProducts = await _context.Products.CountAsync();
+        var totalProducts = await context.Products.CountAsync();
 
         return new POSStats
         {
@@ -105,7 +112,8 @@ public class POSService : IPOSService
 
     public async Task<List<Transaction>> ExportTransactionsAsync(DateTime startDate, DateTime endDate)
     {
-        return await _context.Transactions
+        using var context = await _contextFactory.CreateDbContextAsync();
+        return await context.Transactions
             .Include(t => t.User)
             .Where(t => t.CreatedAt.Date >= startDate.Date && t.CreatedAt.Date <= endDate.Date)
             .OrderByDescending(t => t.CreatedAt)
