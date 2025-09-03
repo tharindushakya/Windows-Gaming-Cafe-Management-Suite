@@ -182,12 +182,12 @@
 @code {
     private List<GameSession>? sessions;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        await LoadSessions();
+        LoadSessions();
     }
 
-    private async Task LoadSessions()
+    private void LoadSessions()
     {
         sessions = DbContext.GameSessions
             .Include(s => s.User)
@@ -236,7 +236,7 @@
             }
 
             await DbContext.SaveChangesAsync();
-            await LoadSessions();
+            LoadSessions();
             StateHasChanged();
         }
     }
@@ -248,7 +248,7 @@
         {
             session.IsPaid = true;
             await DbContext.SaveChangesAsync();
-            await LoadSessions();
+            LoadSessions();
             StateHasChanged();
         }
     }

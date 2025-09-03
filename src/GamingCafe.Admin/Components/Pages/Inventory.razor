@@ -179,12 +179,12 @@
     private List<Product>? filteredProducts;
     private string selectedCategory = "";
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        await LoadProducts();
+        LoadProducts();
     }
 
-    private async Task LoadProducts()
+    private void LoadProducts()
     {
         products = DbContext.Products.OrderBy(p => p.Name).ToList();
         FilterProducts();
@@ -199,7 +199,7 @@
             : products.Where(p => p.Category == selectedCategory).ToList();
     }
 
-    private async Task FilterByCategory(ChangeEventArgs e)
+    private void FilterByCategory(ChangeEventArgs e)
     {
         selectedCategory = e.Value?.ToString() ?? "";
         FilterProducts();
@@ -240,7 +240,7 @@
             {
                 product.StockQuantity = newStock;
                 await DbContext.SaveChangesAsync();
-                await LoadProducts();
+                LoadProducts();
                 StateHasChanged();
             }
             else
@@ -260,7 +260,7 @@
             {
                 DbContext.Products.Remove(product);
                 await DbContext.SaveChangesAsync();
-                await LoadProducts();
+                LoadProducts();
                 StateHasChanged();
             }
         }

@@ -229,12 +229,12 @@
     private List<ProductSummary>? topProducts;
     private List<Transaction>? recentTransactions;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        await LoadReportData();
+        LoadReportData();
     }
 
-    private async Task LoadReportData()
+    private void LoadReportData()
     {
         var sessions = DbContext.GameSessions
             .Where(s => s.StartTime >= startDate && s.StartTime <= endDate.AddDays(1))
@@ -273,15 +273,15 @@
             .ToList();
     }
 
-    private async Task FilterDataByDate()
+    private void FilterDataByDate()
     {
-        await LoadReportData();
+        LoadReportData();
         StateHasChanged();
     }
 
-    private async Task RefreshData()
+    private void RefreshData()
     {
-        await LoadReportData();
+        LoadReportData();
         StateHasChanged();
     }
 

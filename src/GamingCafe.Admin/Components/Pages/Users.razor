@@ -163,12 +163,12 @@
 @code {
     private List<User>? users;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        await LoadUsers();
+        LoadUsers();
     }
 
-    private async Task LoadUsers()
+    private void LoadUsers()
     {
         users = DbContext.Users.OrderBy(u => u.Username).ToList();
     }
@@ -209,7 +209,7 @@
             {
                 DbContext.Users.Remove(user);
                 await DbContext.SaveChangesAsync();
-                await LoadUsers();
+                LoadUsers();
                 StateHasChanged();
             }
         }

@@ -282,12 +282,12 @@
     private decimal averageTransactionValue = 0;
     private int totalProducts = 0;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        await LoadData();
+        LoadData();
     }
 
-    private async Task LoadData()
+    private void LoadData()
     {
         try
         {
@@ -319,7 +319,9 @@
                 Type = (TransactionType)random.Next(0, 3),
                 PaymentMethod = (PaymentMethod)random.Next(0, 3),
                 Description = $"Sample transaction {i + 1}",
+#pragma warning disable CS8601 // Possible null reference assignment - intentional for sample data
                 User = i % 3 == 0 ? null : new User 
+#pragma warning restore CS8601
                 { 
                     Username = $"user{i + 1}",
                     Email = $"user{i + 1}@example.com"
@@ -340,9 +342,9 @@
         transactions = transactions.OrderByDescending(t => t.CreatedAt).ToList();
     }
 
-    private async Task RefreshData()
+    private void RefreshData()
     {
-        await LoadData();
+        LoadData();
         StateHasChanged();
     }
 

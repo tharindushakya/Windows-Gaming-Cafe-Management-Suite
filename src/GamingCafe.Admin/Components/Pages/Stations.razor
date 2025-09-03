@@ -128,12 +128,12 @@
 @code {
     private List<GameStation>? stations;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        await LoadStations();
+        LoadStations();
     }
 
-    private async Task LoadStations()
+    private void LoadStations()
     {
         stations = DbContext.GameStations.OrderBy(s => s.StationName).ToList();
     }
@@ -160,7 +160,7 @@
             {
                 DbContext.GameStations.Remove(station);
                 await DbContext.SaveChangesAsync();
-                await LoadStations();
+                LoadStations();
                 StateHasChanged();
             }
         }
