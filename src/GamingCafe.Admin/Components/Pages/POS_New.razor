@@ -1,7 +1,6 @@
 @page "/pos"
 @using GamingCafe.Core.Models
 @using GamingCafe.Admin.Services
-@using Microsoft.AspNetCore.Components.Web
 @inject IPOSService POSService
 @inject IStationService StationService
 @inject IJSRuntime JSRuntime
@@ -98,19 +97,19 @@
                     <ul class="nav nav-tabs card-header-tabs" role="tablist">
                         <li class="nav-item">
                             <a class="nav-link @(activeTab == "transactions" ? "active" : "")" 
-                               @onclick='() => SetActiveTab("transactions")' href="#" role="tab">
+                               @onclick="() => SetActiveTab(\"transactions\")" href="#" role="tab">
                                 <i class="fas fa-receipt me-1"></i> Transactions
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link @(activeTab == "products" ? "active" : "")" 
-                               @onclick='() => SetActiveTab("products")' href="#" role="tab">
+                               @onclick="() => SetActiveTab(\"products\")" href="#" role="tab">
                                 <i class="fas fa-shopping-cart me-1"></i> Products
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link @(activeTab == "stations" ? "active" : "")" 
-                               @onclick='() => SetActiveTab("stations")' href="#" role="tab">
+                               @onclick="() => SetActiveTab(\"stations\")" href="#" role="tab">
                                 <i class="fas fa-desktop me-1"></i> Stations
                             </a>
                         </li>
@@ -123,7 +122,7 @@
                             <h5 class="mb-0">Recent Transactions</h5>
                             <div class="d-flex gap-2">
                                 <input type="date" class="form-control form-control-sm" style="width: auto;" 
-                                       value="@selectedDate.ToString("yyyy-MM-dd")" @onchange="OnDateChanged" />
+                                       @bind="selectedDate" @onchange="LoadTransactions" />
                                 <button class="btn btn-outline-primary btn-sm" @onclick="LoadTransactions">
                                     <i class="fas fa-sync-alt me-1"></i> Refresh
                                 </button>
@@ -326,9 +325,7 @@
                                                 <div class="d-flex justify-content-between align-items-center">
                                                     <div>
                                                         <strong>@station.StationName</strong>
-                                                        <span class="badge bg-@GetStationStatusColor(station.IsAvailable) ms-2">
-                                                            @(station.IsAvailable ? "Available" : "Occupied")
-                                                        </span>
+                                                        <span class="badge bg-@GetStationStatusColor(station.Status) ms-2">@station.Status</span>
                                                     </div>
                                                     <div class="btn-group btn-group-sm">
                                                         <button class="btn btn-outline-primary" @onclick="() => EditStation(station)">
@@ -368,7 +365,7 @@
                                                         <button class="btn btn-outline-primary" @onclick="() => EditConsole(console)">
                                                             <i class="fas fa-edit"></i>
                                                         </button>
-                                                        <button class="btn btn-outline-danger" @onclick="() => DeleteConsole(console.ConsoleId)">
+                                                        <button class="btn btn-outline-danger" @onclick="() => DeleteConsole(console.Id)">
                                                             <i class="fas fa-trash"></i>
                                                         </button>
                                                     </div>
@@ -460,15 +457,6 @@
     {
         activeTab = tab;
         StateHasChanged();
-    }
-
-    private async Task OnDateChanged(ChangeEventArgs e)
-    {
-        if (DateTime.TryParse(e.Value?.ToString(), out var newDate))
-        {
-            selectedDate = newDate;
-            await LoadTransactions();
-        }
     }
 
     private async Task LaunchPOSApp()
@@ -570,8 +558,7 @@
             var station = new GameStation
             {
                 StationName = stationName,
-                IsAvailable = true,
-                IsActive = true,
+                Status = StationStatus.Available,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -600,8 +587,7 @@
             {
                 ConsoleName = consoleName,
                 Model = model,
-                Status = ConsoleStatus.Online,
-                IsAvailable = true,
+                Status = ConsoleStatus.Available,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -669,23 +655,27 @@
     // Helper methods for styling
     private string GetTransactionTypeBadgeColor(TransactionType type) => type switch
     {
-        TransactionType.Product => "success",
+        TransactionType.Sale => "success",
         TransactionType.Refund => "danger",
         TransactionType.GameTime => "info",
-        TransactionType.WalletTopup => "primary",
-        TransactionType.LoyaltyRedemption => "warning",
         _ => "secondary"
     };
 
-    private string GetStationStatusColor(bool isAvailable) => isAvailable ? "success" : "danger";
+    private string GetStationStatusColor(StationStatus status) => status switch
+    {
+        StationStatus.Available => "success",
+        StationStatus.Occupied => "warning",
+        StationStatus.Maintenance => "danger",
+        StationStatus.OutOfOrder => "dark",
+        _ => "secondary"
+    };
 
     private string GetConsoleStatusColor(ConsoleStatus status) => status switch
     {
-        ConsoleStatus.Online => "success",
+        ConsoleStatus.Available => "success",
         ConsoleStatus.InUse => "warning",
         ConsoleStatus.Maintenance => "danger",
         ConsoleStatus.Updating => "info",
-        ConsoleStatus.Offline => "dark",
         _ => "secondary"
     };
 }

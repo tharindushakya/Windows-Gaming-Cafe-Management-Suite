@@ -1,0 +1,369 @@
+<Window x:Class="GamingCafe.POS.Windows.StationControlWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Station Control Panel" Height="800" Width="1200" 
+        WindowStartupLocation="CenterOwner"
+        Background="#F5F5F5">
+    
+    <Window.Resources>
+        <Style TargetType="Button" x:Key="ModernButton">
+            <Setter Property="Background" Value="#007ACC"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#005A9E"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        
+        <Style TargetType="Border" x:Key="StationCard">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Margin" Value="10"/>
+            <Setter Property="Padding" Value="15"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsAvailable}" Value="True">
+                    <Setter Property="BorderBrush" Value="#27AE60"/>
+                    <Setter Property="BorderThickness" Value="3"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsAvailable}" Value="False">
+                    <Setter Property="BorderBrush" Value="#E74C3C"/>
+                    <Setter Property="BorderThickness" Value="3"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+    
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="60"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="60"/>
+        </Grid.RowDefinitions>
+        
+        <!-- Header -->
+        <Border Grid.Row="0" Background="#2C3E50">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <TextBlock Grid.Column="0" Text="⚙️ Gaming Station Control Panel" 
+                          FontSize="20" FontWeight="Bold" 
+                          Foreground="White" 
+                          VerticalAlignment="Center" 
+                          Margin="20,0"/>
+                          
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0">
+                    <TextBlock Text="Auto Refresh:" Foreground="White" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <CheckBox x:Name="AutoRefreshCheckBox" IsChecked="True" VerticalAlignment="Center" Checked="AutoRefresh_CheckChanged" Unchecked="AutoRefresh_CheckChanged"/>
+                    <Button Content="🔄 Refresh Now" Style="{StaticResource ModernButton}" Background="#27AE60" Click="RefreshStations_Click" Margin="10,0,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+        
+        <!-- Content -->
+        <TabControl Grid.Row="1" Margin="10">
+            <!-- Gaming Stations Tab -->
+            <TabItem Header="PC Gaming Stations" FontSize="14" FontWeight="Bold">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="GameStationsItemsControl">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="3"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource StationCard}">
+                                    <StackPanel>
+                                        <!-- Station Header -->
+                                        <Grid Margin="0,0,0,10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="{Binding StationName}" FontSize="16" FontWeight="Bold"/>
+                                                <TextBlock Text="{Binding StationType}" FontSize="12" Foreground="Gray"/>
+                                            </StackPanel>
+                                            
+                                            <StackPanel Grid.Column="1">
+                                                <Ellipse Width="15" Height="15" HorizontalAlignment="Right">
+                                                    <Ellipse.Style>
+                                                        <Style TargetType="Ellipse">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsAvailable}" Value="True">
+                                                                    <Setter Property="Fill" Value="#27AE60"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding IsAvailable}" Value="False">
+                                                                    <Setter Property="Fill" Value="#E74C3C"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Ellipse.Style>
+                                                </Ellipse>
+                                                <TextBlock FontSize="10" HorizontalAlignment="Right" Margin="0,2,0,0">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsAvailable}" Value="True">
+                                                                    <Setter Property="Text" Value="Available"/>
+                                                                    <Setter Property="Foreground" Value="#27AE60"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding IsAvailable}" Value="False">
+                                                                    <Setter Property="Text" Value="In Use"/>
+                                                                    <Setter Property="Foreground" Value="#E74C3C"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </Grid>
+                                        
+                                        <!-- Station Info -->
+                                        <Grid Margin="0,0,0,10">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            
+                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Rate:" FontWeight="Bold" Margin="0,0,5,0"/>
+                                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding HourlyRate, StringFormat='{}{0:C}/hour'}"/>
+                                            
+                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Current User:" FontWeight="Bold" Margin="0,2,5,0"/>
+                                            <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,2,0,0">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding CurrentUser}" Value="{x:Null}">
+                                                                <Setter Property="Text" Value="None"/>
+                                                                <Setter Property="Foreground" Value="Gray"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                                <TextBlock.Text>
+                                                    <MultiBinding StringFormat="{}{0}">
+                                                        <Binding Path="CurrentUser.Username"/>
+                                                    </MultiBinding>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                            
+                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Session Time:" FontWeight="Bold" Margin="0,2,5,0"/>
+                                            <TextBlock Grid.Row="2" Grid.Column="1" Text="N/A" Margin="0,2,0,0"/>
+                                        </Grid>
+                                        
+                                        <!-- Action Buttons -->
+                                        <StackPanel>
+                                            <Button Content="🎮 Start Session" Click="StartSession_Click" Tag="{Binding StationId}">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource ModernButton}">
+                                                        <Setter Property="Background" Value="#27AE60"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsAvailable}" Value="False">
+                                                                <Setter Property="IsEnabled" Value="False"/>
+                                                                <Setter Property="Background" Value="Gray"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                            
+                                            <Button Content="⏹️ End Session" Click="EndSession_Click" Tag="{Binding StationId}">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource ModernButton}">
+                                                        <Setter Property="Background" Value="#E74C3C"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsAvailable}" Value="True">
+                                                                <Setter Property="IsEnabled" Value="False"/>
+                                                                <Setter Property="Background" Value="Gray"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                            
+                                            <Button Content="⚙️ Configure" Style="{StaticResource ModernButton}" Background="#F39C12" Click="ConfigureStation_Click" Tag="{Binding StationId}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </TabItem>
+            
+            <!-- Console Stations Tab -->
+            <TabItem Header="Console Stations" FontSize="14" FontWeight="Bold">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="ConsoleStationsItemsControl">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="3"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource StationCard}">
+                                    <StackPanel>
+                                        <!-- Console Header -->
+                                        <Grid Margin="0,0,0,10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="{Binding ConsoleName}" FontSize="16" FontWeight="Bold"/>
+                                                <TextBlock Text="{Binding Model}" FontSize="12" Foreground="Gray"/>
+                                            </StackPanel>
+                                            
+                                            <StackPanel Grid.Column="1">
+                                                <Ellipse Width="15" Height="15" HorizontalAlignment="Right">
+                                                    <Ellipse.Style>
+                                                        <Style TargetType="Ellipse">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsAvailable}" Value="True">
+                                                                    <Setter Property="Fill" Value="#27AE60"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding IsAvailable}" Value="False">
+                                                                    <Setter Property="Fill" Value="#E74C3C"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Ellipse.Style>
+                                                </Ellipse>
+                                                <TextBlock FontSize="10" HorizontalAlignment="Right" Margin="0,2,0,0">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsAvailable}" Value="True">
+                                                                    <Setter Property="Text" Value="Available"/>
+                                                                    <Setter Property="Foreground" Value="#27AE60"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding IsAvailable}" Value="False">
+                                                                    <Setter Property="Text" Value="In Use"/>
+                                                                    <Setter Property="Foreground" Value="#E74C3C"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </Grid>
+                                        
+                                        <!-- Console Info -->
+                                        <Grid Margin="0,0,0,10">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            
+                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Type:" FontWeight="Bold" Margin="0,0,5,0"/>
+                                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Type}"/>
+                                            
+                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Rate:" FontWeight="Bold" Margin="0,2,5,0"/>
+                                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding HourlyRate, StringFormat='{}{0:C}/hour'}" Margin="0,2,0,0"/>
+                                            
+                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Current User:" FontWeight="Bold" Margin="0,2,5,0"/>
+                                            <TextBlock Grid.Row="2" Grid.Column="1" Text="None" Foreground="Gray" Margin="0,2,0,0"/>
+                                            
+                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Current Game:" FontWeight="Bold" Margin="0,2,5,0"/>
+                                            <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,2,0,0">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding CurrentGame}" Value="">
+                                                                <Setter Property="Text" Value="None"/>
+                                                                <Setter Property="Foreground" Value="Gray"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                                <TextBlock.Text>
+                                                    <Binding Path="CurrentGame"/>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                        </Grid>
+                                        
+                                        <!-- Action Buttons -->
+                                        <StackPanel>
+                                            <Button Content="🎮 Start Session" Click="StartConsoleSession_Click" Tag="{Binding ConsoleId}">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource ModernButton}">
+                                                        <Setter Property="Background" Value="#27AE60"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsAvailable}" Value="False">
+                                                                <Setter Property="IsEnabled" Value="False"/>
+                                                                <Setter Property="Background" Value="Gray"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                            
+                                            <Button Content="⏹️ End Session" Click="EndConsoleSession_Click" Tag="{Binding ConsoleId}">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource ModernButton}">
+                                                        <Setter Property="Background" Value="#E74C3C"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsAvailable}" Value="True">
+                                                                <Setter Property="IsEnabled" Value="False"/>
+                                                                <Setter Property="Background" Value="Gray"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                            
+                                            <Button Content="🎯 Remote Control" Style="{StaticResource ModernButton}" Background="#9B59B6" Click="RemoteControl_Click" Tag="{Binding ConsoleId}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+        
+        <!-- Footer -->
+        <Border Grid.Row="2" Background="#34495E" BorderThickness="0,1,0,0" BorderBrush="#2C3E50">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0">
+                    <TextBlock x:Name="StatusText" Text="Ready - All systems operational" Foreground="White" VerticalAlignment="Center"/>
+                </StackPanel>
+                
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0">
+                    <Button Content="Close" Style="{StaticResource ModernButton}" Background="#95A5A6" Click="Close_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

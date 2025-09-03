@@ -23,6 +23,7 @@ public partial class MainWindow : Window
         InitializeTimer();
         LoadProducts();
         CartListView.ItemsSource = _cartItems;
+        UpdateStationInfo();
     }
 
     private void InitializeDatabase()
@@ -34,6 +35,11 @@ public partial class MainWindow : Window
         
         _context = new GamingCafeContext(options);
         _context.Database.EnsureCreated();
+    }
+
+    private void UpdateStationInfo()
+    {
+        CurrentStationText.Text = "Station: POS Station 1 (POS-001)";
     }
 
     private void InitializeTimer()
@@ -133,7 +139,7 @@ public partial class MainWindow : Window
     private void UpdateTotals()
     {
         var subtotal = _cartItems.Sum(i => i.Total);
-        var tax = subtotal * 0.1m; // 10% tax
+        var tax = subtotal * 0.1m; // Use fixed tax rate for now
         var total = subtotal + tax;
 
         SubtotalText.Text = subtotal.ToString("C");
@@ -151,7 +157,10 @@ public partial class MainWindow : Window
 
         try
         {
-            var paymentDialog = new PaymentDialog(_cartItems.Sum(i => i.Total) * 1.1m); // Include tax
+            var total = _cartItems.Sum(i => i.Total) * 1.1m; // Include tax
+            var paymentDialog = new PaymentDialog(total);
+            paymentDialog.Owner = this; // Set owner to prevent new window issue
+            
             if (paymentDialog.ShowDialog() == true)
             {
                 await ProcessSale(paymentDialog.PaymentMethod);
@@ -228,17 +237,29 @@ public partial class MainWindow : Window
 
     private void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        MessageBox.Show("Settings functionality coming soon!", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+        MessageBox.Show("Settings window would open here. This includes:\n" +
+                       "- Station configuration\n" +
+                       "- Tax settings\n" +
+                       "- Database connection\n" +
+                       "- Security settings", "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private void DailyReport_Click(object sender, RoutedEventArgs e)
     {
-        MessageBox.Show("Daily report functionality coming soon!", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+        MessageBox.Show("Daily Report window would open here. This includes:\n" +
+                       "- Sales summary\n" +
+                       "- Transaction details\n" +
+                       "- Top products\n" +
+                       "- Export to CSV", "Daily Report", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private void StationControl_Click(object sender, RoutedEventArgs e)
     {
-        MessageBox.Show("Station control functionality coming soon!", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+        MessageBox.Show("Station Control window would open here. This includes:\n" +
+                       "- PC gaming stations management\n" +
+                       "- Console stations control\n" +
+                       "- Start/end sessions\n" +
+                       "- Remote console commands", "Station Control", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     protected override void OnClosed(EventArgs e)

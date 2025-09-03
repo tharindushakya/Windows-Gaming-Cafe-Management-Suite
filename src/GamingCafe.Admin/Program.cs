@@ -1,4 +1,5 @@
 using GamingCafe.Admin.Components;
+using GamingCafe.Admin.Services;
 using Microsoft.EntityFrameworkCore;
 using GamingCafe.Data;
 
@@ -14,6 +15,10 @@ builder.Services.AddHttpClient();
 // Configure Entity Framework
 builder.Services.AddDbContext<GamingCafeContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Add custom services
+builder.Services.AddScoped<IPOSService, POSService>();
+builder.Services.AddScoped<IStationService, StationService>();
 
 // Add authentication
 builder.Services.AddAuthentication("Cookies")
