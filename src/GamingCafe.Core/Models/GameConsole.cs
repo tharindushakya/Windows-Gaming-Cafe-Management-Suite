@@ -54,7 +54,7 @@ public class GameConsole
     [StringLength(500)]
     public string Notes { get; set; } = string.Empty;
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
     // Navigation properties
@@ -77,7 +77,7 @@ public class ConsoleSession
     [StringLength(50)]
     public string GameGenre { get; set; } = string.Empty;
 
-    public DateTime StartTime { get; set; } = DateTime.UtcNow;
+    public DateTime StartTime { get; set; }
     public DateTime? EndTime { get; set; }
     public TimeSpan? Duration => EndTime?.Subtract(StartTime);
 
@@ -96,7 +96,7 @@ public class ConsoleSession
     [StringLength(500)]
     public string Notes { get; set; } = string.Empty;
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; }
 
     // Navigation properties
     public virtual GameConsole Console { get; set; } = null!;
@@ -121,7 +121,7 @@ public class ConsoleRemoteCommand
     [StringLength(1000)]
     public string Response { get; set; } = string.Empty;
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; }
     public DateTime? ExecutedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
 
@@ -152,7 +152,7 @@ public class ConsoleGame
     public string Rating { get; set; } = string.Empty; // ESRB, PEGI, etc.
 
     public decimal SizeGB { get; set; }
-    public DateTime InstallDate { get; set; } = DateTime.UtcNow;
+    public DateTime InstallDate { get; set; }
     public DateTime? LastPlayed { get; set; }
 
     public bool IsInstalled { get; set; } = true;

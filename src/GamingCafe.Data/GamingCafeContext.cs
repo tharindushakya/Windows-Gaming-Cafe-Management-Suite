@@ -41,6 +41,15 @@ public class GamingCafeContext : DbContext
     public DbSet<LoyaltyReward> LoyaltyRewards { get; set; }
     public DbSet<LoyaltyRedemption> LoyaltyRedemptions { get; set; }
 
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        base.OnConfiguring(optionsBuilder);
+        
+        // Suppress the pending model changes warning caused by seeded data
+        optionsBuilder.ConfigureWarnings(warnings => 
+            warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -267,7 +276,7 @@ public class GamingCafeContext : DbContext
             LastName = "Administrator",
             Role = UserRole.Admin,
             IsActive = true,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)
         });
 
         // Seed default gaming stations
@@ -285,7 +294,7 @@ public class GamingCafeContext : DbContext
             ConsoleId = 1,
             ConsoleName = "PS5-01",
             Status = ConsoleStatus.Offline,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)
         });
 
         // Seed modern gaming consoles
@@ -300,7 +309,7 @@ public class GamingCafeContext : DbContext
                 HourlyRate = 8.00m,
                 IsAvailable = true,
                 Status = ConsoleStatus.Offline,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 Notes = "Main PlayStation 5 console with 4K gaming"
             },
             new GameConsole
@@ -313,7 +322,7 @@ public class GamingCafeContext : DbContext
                 HourlyRate = 8.00m,
                 IsAvailable = true,
                 Status = ConsoleStatus.Offline,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 Notes = "Xbox Series X with Game Pass Ultimate"
             },
             new GameConsole
@@ -326,7 +335,7 @@ public class GamingCafeContext : DbContext
                 HourlyRate = 6.00m,
                 IsAvailable = true,
                 Status = ConsoleStatus.Offline,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 Notes = "Nintendo Switch OLED with dock for TV play"
             },
             new GameConsole
@@ -339,7 +348,7 @@ public class GamingCafeContext : DbContext
                 HourlyRate = 5.00m,
                 IsAvailable = true,
                 Status = ConsoleStatus.Offline,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 Notes = "PlayStation 4 Pro for budget gaming"
             },
             new GameConsole
@@ -352,7 +361,7 @@ public class GamingCafeContext : DbContext
                 HourlyRate = 7.00m,
                 IsAvailable = true,
                 Status = ConsoleStatus.Offline,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 Notes = "Portable PC gaming with Steam library"
             }
         );
@@ -371,7 +380,7 @@ public class GamingCafeContext : DbContext
                 Publisher = "Sony Interactive Entertainment",
                 Developer = "Insomniac Games",
                 Description = "Swing through NYC as Spider-Man in this thrilling adventure",
-                InstallDate = DateTime.UtcNow.AddDays(-30)
+                InstallDate = new DateTime(2024, 12, 1, 0, 0, 0, DateTimeKind.Utc)
             },
             new ConsoleGame
             {
@@ -384,7 +393,7 @@ public class GamingCafeContext : DbContext
                 Publisher = "Sony Interactive Entertainment",
                 Developer = "Santa Monica Studio",
                 Description = "Epic conclusion to the Norse saga of Kratos and Atreus",
-                InstallDate = DateTime.UtcNow.AddDays(-25)
+                InstallDate = new DateTime(2024, 12, 5, 0, 0, 0, DateTimeKind.Utc)
             },
             // Xbox Series X Games
             new ConsoleGame
@@ -398,7 +407,7 @@ public class GamingCafeContext : DbContext
                 Publisher = "Microsoft Studios",
                 Developer = "343 Industries",
                 Description = "Master Chief returns in this sci-fi shooter",
-                InstallDate = DateTime.UtcNow.AddDays(-20)
+                InstallDate = new DateTime(2024, 12, 10, 0, 0, 0, DateTimeKind.Utc)
             },
             new ConsoleGame
             {
@@ -411,7 +420,7 @@ public class GamingCafeContext : DbContext
                 Publisher = "Microsoft Studios",
                 Developer = "Playground Games",
                 Description = "Open-world racing across beautiful Mexico",
-                InstallDate = DateTime.UtcNow.AddDays(-35)
+                InstallDate = new DateTime(2024, 11, 25, 0, 0, 0, DateTimeKind.Utc)
             },
             // Nintendo Switch Games
             new ConsoleGame
@@ -425,7 +434,7 @@ public class GamingCafeContext : DbContext
                 Publisher = "Nintendo",
                 Developer = "Nintendo EPD",
                 Description = "Epic adventure in the skies and depths of Hyrule",
-                InstallDate = DateTime.UtcNow.AddDays(-40)
+                InstallDate = new DateTime(2024, 11, 20, 0, 0, 0, DateTimeKind.Utc)
             },
             new ConsoleGame
             {
@@ -438,7 +447,7 @@ public class GamingCafeContext : DbContext
                 Publisher = "Nintendo",
                 Developer = "Nintendo EPD",
                 Description = "Join Mario on a 3D platforming adventure across kingdoms",
-                InstallDate = DateTime.UtcNow.AddDays(-50)
+                InstallDate = new DateTime(2024, 11, 10, 0, 0, 0, DateTimeKind.Utc)
             }
         );
 
@@ -452,7 +461,7 @@ public class GamingCafeContext : DbContext
             MinPointsToRedeem = 100,
             RedemptionValue = 0.01m,
             IsActive = true,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)
         });
 
         // Seed some sample products
