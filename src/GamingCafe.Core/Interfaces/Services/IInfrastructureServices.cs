@@ -103,4 +103,5 @@ public interface IBackupService
     Task<IEnumerable<object>> GetAvailableBackupsAsync();
     Task<bool> DeleteBackupAsync(string backupName);
     Task<bool> ScheduleBackupAsync(TimeSpan interval);
+    Task CreateScheduledBackupAsync();
 }
