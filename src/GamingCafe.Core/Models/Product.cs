@@ -37,38 +37,4 @@ public class Product
 
     // Navigation properties
     public virtual ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();
-    public virtual ICollection<InventoryMovement> InventoryMovements { get; set; } = new List<InventoryMovement>();
-}
-
-public class InventoryMovement
-{
-    public int MovementId { get; set; }
-
-    public int ProductId { get; set; }
-    public int Quantity { get; set; }
-    public MovementType Type { get; set; }
-
-    [StringLength(200)]
-    public string Reason { get; set; } = string.Empty;
-
-    [StringLength(100)]
-    public string Reference { get; set; } = string.Empty;
-
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-
-    [StringLength(100)]
-    public string CreatedBy { get; set; } = string.Empty;
-
-    // Navigation properties
-    public virtual Product Product { get; set; } = null!;
-}
-
-public enum MovementType
-{
-    StockIn = 0,
-    Sale = 1,
-    Adjustment = 2,
-    Damage = 3,
-    Return = 4,
-    Transfer = 5
 }

@@ -42,9 +42,6 @@ public class User
     public virtual ICollection<GameSession> GameSessions { get; set; } = new List<GameSession>();
     public virtual ICollection<Reservation> Reservations { get; set; } = new List<Reservation>();
     public virtual ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();
-    public virtual ICollection<WalletTransaction> WalletTransactions { get; set; } = new List<WalletTransaction>();
-    public virtual ICollection<LoyaltyRedemption> LoyaltyRedemptions { get; set; } = new List<LoyaltyRedemption>();
-    public virtual ICollection<PS5Session> PS5Sessions { get; set; } = new List<PS5Session>();
 }
 
 public enum UserRole

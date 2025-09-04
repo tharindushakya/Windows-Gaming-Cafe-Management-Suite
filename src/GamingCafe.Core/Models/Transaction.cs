@@ -34,26 +34,6 @@ public class Transaction
     public virtual Product? Product { get; set; }
 }
 
-public class WalletTransaction
-{
-    public int WalletTransactionId { get; set; }
-
-    public int UserId { get; set; }
-    public decimal Amount { get; set; }
-    public WalletTransactionType Type { get; set; }
-
-    [StringLength(200)]
-    public string Description { get; set; } = string.Empty;
-
-    [StringLength(100)]
-    public string Reference { get; set; } = string.Empty;
-
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-
-    // Navigation properties
-    public virtual User User { get; set; } = null!;
-}
-
 public enum TransactionType
 {
     GameTime = 0,
@@ -80,11 +60,4 @@ public enum TransactionStatus
     Failed = 2,
     Cancelled = 3,
     Refunded = 4
-}
-
-public enum WalletTransactionType
-{
-    Credit = 0,
-    Debit = 1,
-    Refund = 2
 }
