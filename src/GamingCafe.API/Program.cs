@@ -7,11 +7,15 @@ using GamingCafe.Data;
 using GamingCafe.API.Services;
 using GamingCafe.API.Hubs;
 using GamingCafe.API.Middleware;
+using GamingCafe.Core.Interfaces.Services;
+using GamingCafe.Core.Services;
 using Npgsql.EntityFrameworkCore.PostgreSQL;
 using Serilog;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Hangfire.InMemory;
+using FluentValidation;
+using FluentValidation.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -66,6 +70,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 // Add Authorization
 builder.Services.AddAuthorization();
 
+// Configure FluentValidation
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+builder.Services.AddFluentValidationAutoValidation();
+
 // Add SignalR
 builder.Services.AddSignalR();
 
@@ -82,6 +90,10 @@ builder.Services.AddCors(options =>
 });
 
 // Add custom services
+builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IFileUploadService, FileUploadService>();
+builder.Services.AddScoped<ICacheService, CacheService>();
+builder.Services.AddScoped<IValidationService, ValidationService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IStationService, StationService>();
 
