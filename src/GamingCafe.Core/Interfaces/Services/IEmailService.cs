@@ -61,4 +61,35 @@ public interface IEmailService
     /// <param name="scheduledTime">When to send the email (null for immediate)</param>
     /// <returns>Queue result with tracking ID</returns>
     Task<EmailQueueResult> QueueEmailAsync(EmailMessage emailMessage, DateTime? scheduledTime = null);
+
+    // Legacy methods for backward compatibility
+    /// <summary>
+    /// Send a simple email (legacy method for backward compatibility)
+    /// </summary>
+    Task<bool> SendEmailAsync(string to, string subject, string body, bool isHtml = false);
+
+    /// <summary>
+    /// Send welcome email using predefined template
+    /// </summary>
+    Task<bool> SendWelcomeEmailAsync(string to, string userName);
+
+    /// <summary>
+    /// Send reservation confirmation email
+    /// </summary>
+    Task<bool> SendReservationConfirmationAsync(string to, string userName, DateTime startTime, DateTime endTime, string stationName);
+
+    /// <summary>
+    /// Send password reset email
+    /// </summary>
+    Task<bool> SendPasswordResetEmailAsync(string to, string resetToken);
+
+    /// <summary>
+    /// Send email verification message
+    /// </summary>
+    Task<bool> SendEmailVerificationAsync(string to, string userName, string verificationToken);
+
+    /// <summary>
+    /// Send low balance notification
+    /// </summary>
+    Task<bool> SendLowBalanceNotificationAsync(string to, string userName, decimal currentBalance);
 }

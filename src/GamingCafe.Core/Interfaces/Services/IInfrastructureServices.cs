@@ -32,19 +32,6 @@ public interface ICacheService
     Task<string> GetCacheHealthStatusAsync();
 }
 
-public interface IEmailService
-{
-    // Email sending
-    Task<bool> SendEmailAsync(string to, string subject, string body, bool isHtml = false);
-
-    // Template emails
-    Task<bool> SendWelcomeEmailAsync(string to, string userName);
-    Task<bool> SendReservationConfirmationAsync(string to, string userName, DateTime startTime, DateTime endTime, string stationName);
-    Task<bool> SendPasswordResetEmailAsync(string to, string resetToken);
-    Task<bool> SendEmailVerificationAsync(string to, string userName, string verificationToken);
-    Task<bool> SendLowBalanceNotificationAsync(string to, string userName, decimal currentBalance);
-}
-
 public interface IFileUploadService
 {
     // File operations

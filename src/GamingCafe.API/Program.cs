@@ -6,6 +6,8 @@ using System.Text;
 using GamingCafe.Data;
 using GamingCafe.API.Services;
 using GamingCafe.API.Hubs;
+using GamingCafe.Core.Interfaces.Services;
+using GamingCafe.Core.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -83,7 +85,28 @@ builder.Services.AddHealthChecks()
         {
             return HealthCheckResult.Unhealthy("Application health check failed", ex);
         }
-    }, tags: new[] { "application", "system", "critical" });
+    }, tags: new[] { "application", "system", "critical" })
+    
+    // Email Service Health Check
+    .AddCheck("email", () =>
+    {
+        try
+        {
+            #pragma warning disable ASP0000
+            using var scope = builder.Services.BuildServiceProvider().CreateScope();
+            #pragma warning restore ASP0000
+            var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
+            var healthResult = emailService.TestConnectionAsync().GetAwaiter().GetResult();
+            
+            return healthResult.IsHealthy 
+                ? HealthCheckResult.Healthy($"Email service healthy - Response time: {healthResult.ResponseTime.TotalMilliseconds:F0}ms")
+                : HealthCheckResult.Unhealthy($"Email service unhealthy: {healthResult.ErrorMessage}");
+        }
+        catch (Exception ex)
+        {
+            return HealthCheckResult.Unhealthy("Email health check failed", ex);
+        }
+    }, tags: new[] { "email", "smtp", "external" });
 
 // Configure JWT Authentication
 var jwtKey = builder.Configuration["Jwt:Key"];
@@ -130,7 +153,7 @@ builder.Services.AddCors(options =>
 });
 
 // Add custom services - Comment out until interfaces and implementations are created
-// builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
 // builder.Services.AddScoped<IFileUploadService, FileUploadService>();
 // builder.Services.AddScoped<ICacheService, CacheService>();
 // builder.Services.AddScoped<IValidationService, ValidationService>();

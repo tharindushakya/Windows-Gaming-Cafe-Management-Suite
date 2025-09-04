@@ -44,7 +44,7 @@ public class FileUploadService : IFileUploadService
         }
     }
 
-    public async Task<bool> DeleteFileAsync(string fileUrl)
+    public Task<bool> DeleteFileAsync(string fileUrl)
     {
         try
         {
@@ -55,19 +55,19 @@ public class FileUploadService : IFileUploadService
             {
                 File.Delete(filePath);
                 _logger.LogInformation("File deleted successfully: {FileName}", fileName);
-                return true;
+                return Task.FromResult(true);
             }
 
-            return false;
+            return Task.FromResult(false);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to delete file: {FileUrl}", fileUrl);
-            return false;
+            return Task.FromResult(false);
         }
     }
 
-    public async Task<Stream> DownloadFileAsync(string fileUrl)
+    public Task<Stream> DownloadFileAsync(string fileUrl)
     {
         try
         {
@@ -76,7 +76,8 @@ public class FileUploadService : IFileUploadService
 
             if (File.Exists(filePath))
             {
-                return new FileStream(filePath, FileMode.Open, FileAccess.Read);
+                var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+                return Task.FromResult<Stream>(stream);
             }
 
             throw new FileNotFoundException($"File not found: {fileUrl}");
@@ -88,22 +89,22 @@ public class FileUploadService : IFileUploadService
         }
     }
 
-    public async Task<bool> FileExistsAsync(string fileUrl)
+    public Task<bool> FileExistsAsync(string fileUrl)
     {
         try
         {
             var fileName = Path.GetFileName(fileUrl);
             var filePath = Path.Combine(_uploadPath, fileName);
-            return File.Exists(filePath);
+            return Task.FromResult(File.Exists(filePath));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to check file existence: {FileUrl}", fileUrl);
-            return false;
+            return Task.FromResult(false);
         }
     }
 
-    public async Task<long> GetFileSizeAsync(string fileUrl)
+    public Task<long> GetFileSizeAsync(string fileUrl)
     {
         try
         {
@@ -113,15 +114,15 @@ public class FileUploadService : IFileUploadService
             if (File.Exists(filePath))
             {
                 var fileInfo = new FileInfo(filePath);
-                return fileInfo.Length;
+                return Task.FromResult(fileInfo.Length);
             }
 
-            return 0;
+            return Task.FromResult(0L);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get file size: {FileUrl}", fileUrl);
-            return 0;
+            return Task.FromResult(0L);
         }
     }
 }

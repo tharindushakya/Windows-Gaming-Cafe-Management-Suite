@@ -179,6 +179,9 @@ public class EmailServiceHealthCheck : IHealthCheck
         {
             var stopwatch = Stopwatch.StartNew();
             
+            // Simulate actual async health check
+            await Task.Delay(1, cancellationToken);
+            
             // Check email service configuration
             var smtpHost = _configuration["Email:SmtpHost"];
             var smtpPort = _configuration["Email:SmtpPort"];
