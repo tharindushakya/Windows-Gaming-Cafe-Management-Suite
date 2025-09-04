@@ -143,7 +143,7 @@ public partial class ConsoleRemoteDialog : Window
                 Command = command,
                 Status = CommandStatus.Pending,
                 CreatedAt = DateTime.UtcNow,
-                CreatedBy = "POS System"
+                CreatedBy = null // System command, no specific user
             };
             
             _context.ConsoleRemoteCommands.Add(remoteCommand);

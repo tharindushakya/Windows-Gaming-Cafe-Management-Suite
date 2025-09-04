@@ -33,6 +33,12 @@ public class User
     public bool IsActive { get; set; } = true;
     public UserRole Role { get; set; } = UserRole.Customer;
 
+    // Security tokens
+    public string? RefreshToken { get; set; }
+    public DateTime? RefreshTokenExpiryTime { get; set; }
+    public string? PasswordResetToken { get; set; }
+    public DateTime? PasswordResetTokenExpiry { get; set; }
+
     // Wallet and Loyalty
     public decimal WalletBalance { get; set; } = 0;
     public int LoyaltyPoints { get; set; } = 0;

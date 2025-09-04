@@ -1,9 +1,11 @@
 using GamingCafe.Core.Models;
+using GamingCafe.Core.DTOs;
 using GamingCafe.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using BCrypt.Net;
 
@@ -11,10 +13,17 @@ namespace GamingCafe.API.Services;
 
 public interface IAuthService
 {
-    Task<string?> AuthenticateAsync(string username, string password);
+    Task<LoginResponse?> AuthenticateAsync(LoginRequest request);
+    Task<RefreshTokenResponse?> RefreshTokenAsync(RefreshTokenRequest request);
     Task<User?> RegisterAsync(User user, string password);
+    Task<bool> InitiatePasswordResetAsync(string email);
+    Task<bool> ResetPasswordAsync(PasswordResetConfirmRequest request);
     Task<User?> GetUserByIdAsync(int userId);
     Task<User?> GetUserByUsernameAsync(string username);
+    Task<bool> RevokeRefreshTokenAsync(string refreshToken);
+    
+    // Legacy method for backward compatibility
+    Task<string?> AuthenticateAsync(string username, string password);
 }
 
 public class AuthService : IAuthService
@@ -28,6 +37,128 @@ public class AuthService : IAuthService
         _configuration = configuration;
     }
 
+    public async Task<LoginResponse?> AuthenticateAsync(LoginRequest request)
+    {
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.Email == request.Email && u.IsActive);
+
+        if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+            return null;
+
+        var accessToken = GenerateJwtToken(user);
+        var refreshToken = GenerateRefreshToken();
+
+        user.RefreshToken = refreshToken;
+        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7); // 7 days
+        user.LastLoginAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        return new LoginResponse
+        {
+            AccessToken = accessToken,
+            RefreshToken = refreshToken,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(15), // JWT expires in 15 minutes
+            User = new UserDto
+            {
+                UserId = user.UserId,
+                Username = user.Username,
+                Email = user.Email,
+                FirstName = user.FirstName,
+                LastName = user.LastName,
+                Role = user.Role.ToString(),
+                WalletBalance = user.WalletBalance,
+                LoyaltyPoints = user.LoyaltyPoints
+            }
+        };
+    }
+
+    public async Task<RefreshTokenResponse?> RefreshTokenAsync(RefreshTokenRequest request)
+    {
+        var principal = GetPrincipalFromExpiredToken(request.AccessToken);
+        if (principal == null)
+            return null;
+
+        var userIdClaim = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!int.TryParse(userIdClaim, out int userId))
+            return null;
+
+        var user = await _context.Users.FindAsync(userId);
+        if (user == null || user.RefreshToken != request.RefreshToken || 
+            user.RefreshTokenExpiryTime <= DateTime.UtcNow)
+            return null;
+
+        var newAccessToken = GenerateJwtToken(user);
+        var newRefreshToken = GenerateRefreshToken();
+
+        user.RefreshToken = newRefreshToken;
+        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
+
+        await _context.SaveChangesAsync();
+
+        return new RefreshTokenResponse
+        {
+            AccessToken = newAccessToken,
+            RefreshToken = newRefreshToken,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(15)
+        };
+    }
+
+    public async Task<bool> InitiatePasswordResetAsync(string email)
+    {
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.Email == email && u.IsActive);
+
+        if (user == null)
+            return false; // Don't reveal if email exists
+
+        var resetToken = GeneratePasswordResetToken();
+        user.PasswordResetToken = resetToken;
+        user.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1); // 1 hour expiry
+
+        await _context.SaveChangesAsync();
+
+        // TODO: Send email with reset token
+        // await _emailService.SendPasswordResetEmailAsync(email, resetToken);
+
+        return true;
+    }
+
+    public async Task<bool> ResetPasswordAsync(PasswordResetConfirmRequest request)
+    {
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.Email == request.Email && 
+                                    u.PasswordResetToken == request.Token &&
+                                    u.PasswordResetTokenExpiry > DateTime.UtcNow);
+
+        if (user == null)
+            return false;
+
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        user.PasswordResetToken = null;
+        user.PasswordResetTokenExpiry = null;
+        user.RefreshToken = null; // Invalidate all refresh tokens
+
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> RevokeRefreshTokenAsync(string refreshToken)
+    {
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.RefreshToken == refreshToken);
+
+        if (user == null)
+            return false;
+
+        user.RefreshToken = null;
+        user.RefreshTokenExpiryTime = null;
+
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    // Legacy method for backward compatibility
     public async Task<string?> AuthenticateAsync(string username, string password)
     {
         var user = await _context.Users
@@ -36,7 +167,6 @@ public class AuthService : IAuthService
         if (user == null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
             return null;
 
-        // Update last login
         user.LastLoginAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
@@ -45,14 +175,12 @@ public class AuthService : IAuthService
 
     public async Task<User?> RegisterAsync(User user, string password)
     {
-        // Check if username or email already exists
         var existingUser = await _context.Users
             .FirstOrDefaultAsync(u => u.Username == user.Username || u.Email == user.Email);
 
         if (existingUser != null)
             return null;
 
-        // Hash password
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password);
         user.CreatedAt = DateTime.UtcNow;
 
@@ -76,25 +204,83 @@ public class AuthService : IAuthService
 
     private string GenerateJwtToken(User user)
     {
-        var tokenHandler = new JwtSecurityTokenHandler();
-        var key = Encoding.ASCII.GetBytes(_configuration["Jwt:Key"]!);
-        var tokenDescriptor = new SecurityTokenDescriptor
+        var jwtKey = _configuration["Jwt:Key"];
+        var jwtIssuer = _configuration["Jwt:Issuer"];
+        var jwtAudience = _configuration["Jwt:Audience"];
+
+        if (string.IsNullOrEmpty(jwtKey))
+            throw new InvalidOperationException("JWT Key is not configured");
+
+        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
+        var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+
+        var claims = new[]
         {
-            Subject = new ClaimsIdentity(new[]
-            {
-                new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
-                new Claim(ClaimTypes.Name, user.Username),
-                new Claim(ClaimTypes.Email, user.Email),
-                new Claim(ClaimTypes.Role, user.Role.ToString())
-            }),
-            Expires = DateTime.UtcNow.AddDays(7),
-            SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key),
-                SecurityAlgorithms.HmacSha256Signature),
-            Issuer = _configuration["Jwt:Issuer"],
-            Audience = _configuration["Jwt:Audience"]
+            new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
+            new Claim(ClaimTypes.Email, user.Email),
+            new Claim(ClaimTypes.Name, user.Username),
+            new Claim(ClaimTypes.Role, user.Role.ToString()),
+            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 
-        var token = tokenHandler.CreateToken(tokenDescriptor);
-        return tokenHandler.WriteToken(token);
+        var token = new JwtSecurityToken(
+            issuer: jwtIssuer,
+            audience: jwtAudience,
+            claims: claims,
+            expires: DateTime.UtcNow.AddMinutes(15), // Short-lived access token
+            signingCredentials: credentials
+        );
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    private string GenerateRefreshToken()
+    {
+        var randomNumber = new byte[32];
+        using var rng = RandomNumberGenerator.Create();
+        rng.GetBytes(randomNumber);
+        return Convert.ToBase64String(randomNumber);
+    }
+
+    private string GeneratePasswordResetToken()
+    {
+        var randomNumber = new byte[16];
+        using var rng = RandomNumberGenerator.Create();
+        rng.GetBytes(randomNumber);
+        return Convert.ToBase64String(randomNumber).Replace("+", "").Replace("/", "").Replace("=", "");
+    }
+
+    private ClaimsPrincipal? GetPrincipalFromExpiredToken(string token)
+    {
+        var jwtKey = _configuration["Jwt:Key"];
+        
+        if (string.IsNullOrEmpty(jwtKey))
+            throw new InvalidOperationException("JWT Key is not configured");
+            
+        var tokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateAudience = false,
+            ValidateIssuer = false,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+            ValidateLifetime = false // We want to check expired tokens
+        };
+
+        var tokenHandler = new JwtSecurityTokenHandler();
+        
+        try
+        {
+            var principal = tokenHandler.ValidateToken(token, tokenValidationParameters, out SecurityToken validatedToken);
+            
+            if (validatedToken is not JwtSecurityToken jwtSecurityToken || 
+                !jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase))
+                return null;
+
+            return principal;
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

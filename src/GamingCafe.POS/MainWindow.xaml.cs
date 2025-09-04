@@ -212,7 +212,7 @@ public partial class MainWindow : Window
                         Type = MovementType.Sale,
                         Reason = "POS Sale",
                         CreatedAt = DateTime.UtcNow,
-                        CreatedBy = "POS System"
+                        CreatedBy = null // System sale, no specific user
                     };
 
                     _context.InventoryMovements.Add(movement);

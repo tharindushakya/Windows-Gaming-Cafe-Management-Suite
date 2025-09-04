@@ -1,8 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
 using GamingCafe.API.Services;
 using GamingCafe.Core.Models;
-using GamingCafe.Core.Interfaces;
+using GamingCafe.Core.DTOs;
 
 namespace GamingCafe.API.Controllers;
 
@@ -20,29 +21,65 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
-        if (string.IsNullOrEmpty(request.Username) || string.IsNullOrEmpty(request.Password))
-            return BadRequest("Username and password are required");
+        if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password))
+            return BadRequest("Email and password are required");
 
-        var token = await _authService.AuthenticateAsync(request.Username, request.Password);
-        if (token == null)
+        var result = await _authService.AuthenticateAsync(request);
+        if (result == null)
             return Unauthorized("Invalid credentials");
 
-        var user = await _authService.GetUserByUsernameAsync(request.Username);
-        return Ok(new LoginResponse
-        {
-            Token = token,
-            User = new AuthUserDto
-            {
-                UserId = user!.UserId,
-                Username = user.Username,
-                Email = user.Email,
-                FirstName = user.FirstName,
-                LastName = user.LastName,
-                Role = user.Role.ToString(),
-                WalletBalance = user.WalletBalance,
-                LoyaltyPoints = user.LoyaltyPoints
-            }
-        });
+        return Ok(result);
+    }
+
+    [HttpPost("refresh-token")]
+    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
+    {
+        if (string.IsNullOrEmpty(request.AccessToken) || string.IsNullOrEmpty(request.RefreshToken))
+            return BadRequest("Access token and refresh token are required");
+
+        var result = await _authService.RefreshTokenAsync(request);
+        if (result == null)
+            return Unauthorized("Invalid or expired tokens");
+
+        return Ok(result);
+    }
+
+    [HttpPost("revoke-token")]
+    [Authorize]
+    public async Task<IActionResult> RevokeToken([FromBody] RevokeTokenRequest request)
+    {
+        var result = await _authService.RevokeRefreshTokenAsync(request.RefreshToken);
+        if (!result)
+            return BadRequest("Token revocation failed");
+
+        return Ok(new { message = "Token revoked successfully" });
+    }
+
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword([FromBody] PasswordResetRequest request)
+    {
+        if (string.IsNullOrEmpty(request.Email))
+            return BadRequest("Email is required");
+
+        var result = await _authService.InitiatePasswordResetAsync(request.Email);
+        
+        // Always return success to prevent email enumeration
+        return Ok(new { message = "If the email exists, a password reset link has been sent" });
+    }
+
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword([FromBody] PasswordResetConfirmRequest request)
+    {
+        if (string.IsNullOrEmpty(request.Email) || 
+            string.IsNullOrEmpty(request.Token) || 
+            string.IsNullOrEmpty(request.NewPassword))
+            return BadRequest("Email, token, and new password are required");
+
+        var result = await _authService.ResetPasswordAsync(request);
+        if (!result)
+            return BadRequest("Invalid or expired reset token");
+
+        return Ok(new { message = "Password reset successfully" });
     }
 
     [HttpPost("register")]
@@ -51,47 +88,36 @@ public class AuthController : ControllerBase
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
-        var newUser = new User
+        var user = new User
         {
             Username = request.Username,
             Email = request.Email,
             FirstName = request.FirstName,
             LastName = request.LastName,
-            PhoneNumber = request.PhoneNumber ?? "",
-            DateOfBirth = request.DateOfBirth,
-            Role = UserRole.Customer
+            PhoneNumber = request.PhoneNumber,
+            DateOfBirth = request.DateOfBirth
         };
 
-        var createdUser = await _authService.RegisterAsync(newUser, request.Password);
-        if (createdUser == null)
-            return BadRequest("Failed to create user");
+        var result = await _authService.RegisterAsync(user, request.Password);
+        if (result == null)
+            return BadRequest("User already exists with this email or username");
 
-        return Ok(new AuthUserDto
-        {
-            UserId = createdUser.UserId,
-            Username = createdUser.Username,
-            Email = createdUser.Email,
-            FirstName = createdUser.FirstName,
-            LastName = createdUser.LastName,
-            Role = createdUser.Role.ToString(),
-            WalletBalance = createdUser.WalletBalance,
-            LoyaltyPoints = createdUser.LoyaltyPoints
-        });
+        return Ok(new { message = "User registered successfully", userId = result.UserId });
     }
 
     [HttpGet("profile")]
     [Authorize]
     public async Task<IActionResult> GetProfile()
     {
-        var userIdClaim = User.FindFirst("userId")?.Value;
-        if (!int.TryParse(userIdClaim, out var userId))
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
             return Unauthorized();
 
         var user = await _authService.GetUserByIdAsync(userId);
         if (user == null)
             return NotFound();
 
-        return Ok(new AuthUserDto
+        return Ok(new UserDto
         {
             UserId = user.UserId,
             Username = user.Username,
@@ -103,14 +129,21 @@ public class AuthController : ControllerBase
             LoyaltyPoints = user.LoyaltyPoints
         });
     }
+
+    [HttpPost("logout")]
+    [Authorize]
+    public async Task<IActionResult> Logout([FromBody] LogoutRequest request)
+    {
+        if (!string.IsNullOrEmpty(request.RefreshToken))
+        {
+            await _authService.RevokeRefreshTokenAsync(request.RefreshToken);
+        }
+
+        return Ok(new { message = "Logged out successfully" });
+    }
 }
 
-public class LoginRequest
-{
-    public string Username { get; set; } = string.Empty;
-    public string Password { get; set; } = string.Empty;
-}
-
+// Additional DTOs for new endpoints
 public class RegisterRequest
 {
     public string Username { get; set; } = string.Empty;
@@ -118,25 +151,16 @@ public class RegisterRequest
     public string Password { get; set; } = string.Empty;
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
-    public string? PhoneNumber { get; set; }
+    public string PhoneNumber { get; set; } = string.Empty;
     public DateTime DateOfBirth { get; set; }
 }
 
-public class LoginResponse
+public class RevokeTokenRequest
 {
-    public string Token { get; set; } = string.Empty;
-    public AuthUserDto User { get; set; } = new();
+    public string RefreshToken { get; set; } = string.Empty;
 }
 
-public class AuthUserDto
+public class LogoutRequest
 {
-    public int UserId { get; set; }
-    public string Username { get; set; } = string.Empty;
-    public string Email { get; set; } = string.Empty;
-    public string FirstName { get; set; } = string.Empty;
-    public string LastName { get; set; } = string.Empty;
-    public string Role { get; set; } = string.Empty;
-    public decimal WalletBalance { get; set; }
-    public int LoyaltyPoints { get; set; }
+    public string RefreshToken { get; set; } = string.Empty;
 }
-
