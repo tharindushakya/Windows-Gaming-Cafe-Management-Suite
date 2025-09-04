@@ -30,7 +30,7 @@ public class AuthController : ControllerBase
         return Ok(new LoginResponse
         {
             Token = token,
-            User = new UserDto
+            User = new AuthUserDto
             {
                 UserId = user!.UserId,
                 Username = user.Username,
@@ -50,7 +50,7 @@ public class AuthController : ControllerBase
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
-        var user = new User
+        var newUser = new User
         {
             Username = request.Username,
             Email = request.Email,
@@ -61,11 +61,11 @@ public class AuthController : ControllerBase
             Role = UserRole.Customer
         };
 
-        var createdUser = await _authService.RegisterAsync(user, request.Password);
+        var createdUser = await _authService.RegisterAsync(newUser, request.Password);
         if (createdUser == null)
-            return Conflict("Username or email already exists");
+            return BadRequest("Failed to create user");
 
-        return Ok(new UserDto
+        return Ok(new AuthUserDto
         {
             UserId = createdUser.UserId,
             Username = createdUser.Username,
@@ -82,13 +82,15 @@ public class AuthController : ControllerBase
     [Authorize]
     public async Task<IActionResult> GetProfile()
     {
-        var userId = int.Parse(User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value ?? "0");
-        var user = await _authService.GetUserByIdAsync(userId);
+        var userIdClaim = User.FindFirst("userId")?.Value;
+        if (!int.TryParse(userIdClaim, out var userId))
+            return Unauthorized();
 
+        var user = await _authService.GetUserByIdAsync(userId);
         if (user == null)
             return NotFound();
 
-        return Ok(new UserDto
+        return Ok(new AuthUserDto
         {
             UserId = user.UserId,
             Username = user.Username,
@@ -122,10 +124,10 @@ public class RegisterRequest
 public class LoginResponse
 {
     public string Token { get; set; } = string.Empty;
-    public UserDto User { get; set; } = new();
+    public AuthUserDto User { get; set; } = new();
 }
 
-public class UserDto
+public class AuthUserDto
 {
     public int UserId { get; set; }
     public string Username { get; set; } = string.Empty;
