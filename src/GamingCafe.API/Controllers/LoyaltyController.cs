@@ -369,8 +369,8 @@ public class LoyaltyController : ControllerBase
                 UserId = userId,
                 Description = request.Reason ?? "Loyalty points awarded",
                 Amount = 0, // No monetary value for point awards
-                Type = TransactionType.Other,
-                PaymentMethod = PaymentMethod.Other,
+                Type = TransactionType.LoyaltyRedemption,
+                PaymentMethod = PaymentMethod.Cash, // Default payment method
                 Status = TransactionStatus.Completed,
                 CreatedAt = DateTime.UtcNow
             };
@@ -443,7 +443,7 @@ public class LoyaltyController : ControllerBase
                 UserId = userId,
                 Description = $"Loyalty points redemption: {request.Points} points for ${redemptionValue:F2}",
                 Amount = redemptionValue,
-                Type = TransactionType.Credit,
+                Type = TransactionType.WalletTopup,
                 PaymentMethod = PaymentMethod.LoyaltyPoints,
                 Status = TransactionStatus.Completed,
                 CreatedAt = DateTime.UtcNow
