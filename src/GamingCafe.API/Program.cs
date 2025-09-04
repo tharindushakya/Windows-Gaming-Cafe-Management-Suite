@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using System.Text;
 using GamingCafe.Data;
 using GamingCafe.API.Services;
@@ -9,8 +10,21 @@ using Npgsql.EntityFrameworkCore.PostgreSQL;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure built-in logging for now
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
+builder.Logging.SetMinimumLevel(LogLevel.Information);
+
 // Add services to the container.
 builder.Services.AddControllers();
+
+// Configure Entity Framework
+builder.Services.AddDbContext<GamingCafeContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Configure Health Checks
+builder.Services.AddHealthChecks();
 
 // Configure Entity Framework
 builder.Services.AddDbContext<GamingCafeContext>(options =>
@@ -73,6 +87,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+// TODO: Add global exception handling middleware once namespace issues are resolved
+// app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
+
 // Enable CORS
 app.UseCors("LocalhostOnly");
 
@@ -84,11 +101,41 @@ app.MapControllers();
 // Map SignalR Hub
 app.MapHub<GameCafeHub>("/gamecafehub");
 
-// Ensure database is created
+// Map Health Check endpoints
+app.MapHealthChecks("/health");
+
+// Ensure database is created and seeded
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<GamingCafeContext>();
+    
+    // Ensure database is created
     context.Database.EnsureCreated();
+    
+    // Apply any pending migrations
+    if (context.Database.GetPendingMigrations().Any())
+    {
+        context.Database.Migrate();
+    }
+    
+    // Seed the database if environment is Development
+    if (app.Environment.IsDevelopment())
+    {
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        
+        try
+        {
+            // TODO: Enable DatabaseSeeder once namespace resolution is fixed
+            // var seeder = new DatabaseSeeder(context, 
+            //     scope.ServiceProvider.GetRequiredService<ILogger<DatabaseSeeder>>());
+            // await seeder.SeedAsync();
+            logger.LogInformation("Database migration and setup completed successfully");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "An error occurred while seeding the database");
+        }
+    }
 }
 
 app.Run();

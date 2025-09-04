@@ -17,8 +17,15 @@ public class GamingCafeContext : DbContext
     public DbSet<GameSession> GameSessions { get; set; }
     public DbSet<Reservation> Reservations { get; set; }
 
+    // Console Management
+    public DbSet<GameConsole> GameConsoles { get; set; }
+    public DbSet<ConsoleSession> ConsoleSessions { get; set; }
+    public DbSet<ConsoleRemoteCommand> ConsoleRemoteCommands { get; set; }
+    public DbSet<ConsoleGame> ConsoleGames { get; set; }
+
     // POS & Inventory
     public DbSet<Product> Products { get; set; }
+    public DbSet<InventoryMovement> InventoryMovements { get; set; }
 
     // Financial
     public DbSet<Transaction> Transactions { get; set; }
@@ -68,6 +75,30 @@ public class GamingCafeContext : DbContext
             entity.Property(e => e.Storage).HasMaxLength(100);
             entity.Property(e => e.IpAddress).HasMaxLength(15);
             entity.Property(e => e.MacAddress).HasMaxLength(17);
+
+            entity.HasOne(e => e.CurrentUser)
+                  .WithMany()
+                  .HasForeignKey(e => e.CurrentUserId)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // GameConsole Configuration
+        modelBuilder.Entity<GameConsole>(entity =>
+        {
+            entity.HasKey(e => e.ConsoleId);
+            entity.Property(e => e.ConsoleName).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Type).HasConversion<int>();
+            entity.Property(e => e.Model).HasMaxLength(50);
+            entity.Property(e => e.IpAddress).HasMaxLength(15);
+            entity.Property(e => e.MacAddress).HasMaxLength(17);
+            entity.Property(e => e.SerialNumber).HasMaxLength(50);
+            entity.Property(e => e.FirmwareVersion).HasMaxLength(100);
+            entity.Property(e => e.Status).HasConversion<int>();
+            entity.Property(e => e.CurrentGame).HasMaxLength(100);
+            entity.Property(e => e.ControllerSettings).HasMaxLength(200);
+            entity.Property(e => e.DisplaySettings).HasMaxLength(200);
+            entity.Property(e => e.HourlyRate).HasColumnType("decimal(18,2)");
+            entity.Property(e => e.Notes).HasMaxLength(500);
 
             entity.HasOne(e => e.CurrentUser)
                   .WithMany()
@@ -182,6 +213,135 @@ public class GamingCafeContext : DbContext
                   .HasForeignKey(e => e.RewardId)
                   .OnDelete(DeleteBehavior.Cascade);
         });
+
+        // InventoryMovement Configuration
+        modelBuilder.Entity<InventoryMovement>(entity =>
+        {
+            entity.HasKey(e => e.MovementId);
+            entity.Property(e => e.Reason).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Notes).HasMaxLength(500);
+            entity.Property(e => e.ReferenceNumber).HasMaxLength(100);
+            entity.Property(e => e.Supplier).HasMaxLength(100);
+            entity.Property(e => e.BatchNumber).HasMaxLength(100);
+            entity.Property(e => e.UnitCost).HasColumnType("decimal(18,2)");
+            entity.Property(e => e.TotalCost).HasColumnType("decimal(18,2)");
+            entity.Property(e => e.Type).HasConversion<int>();
+
+            entity.HasOne(e => e.Product)
+                  .WithMany()
+                  .HasForeignKey(e => e.ProductId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.Creator)
+                  .WithMany()
+                  .HasForeignKey(e => e.CreatedBy)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ConsoleSession Configuration
+        modelBuilder.Entity<ConsoleSession>(entity =>
+        {
+            entity.HasKey(e => e.SessionId);
+            entity.Property(e => e.HourlyRate).HasColumnType("decimal(18,2)");
+            entity.Property(e => e.TotalCost).HasColumnType("decimal(18,2)");
+            entity.Property(e => e.Notes).HasMaxLength(500);
+            entity.Property(e => e.Status).HasConversion<int>();
+
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Console)
+                  .WithMany()
+                  .HasForeignKey(e => e.ConsoleId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Game)
+                  .WithMany()
+                  .HasForeignKey(e => e.GameId)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ConsoleRemoteCommand Configuration
+        modelBuilder.Entity<ConsoleRemoteCommand>(entity =>
+        {
+            entity.HasKey(e => e.CommandId);
+            entity.Property(e => e.Command).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Parameters).HasMaxLength(500);
+            entity.Property(e => e.Response).HasMaxLength(1000);
+            entity.Property(e => e.ErrorMessage).HasMaxLength(500);
+            entity.Property(e => e.Status).HasConversion<int>();
+            entity.Property(e => e.Type).HasConversion<int>();
+
+            entity.HasOne(e => e.Console)
+                  .WithMany()
+                  .HasForeignKey(e => e.ConsoleId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Session)
+                  .WithMany()
+                  .HasForeignKey(e => e.SessionId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.Creator)
+                  .WithMany()
+                  .HasForeignKey(e => e.CreatedBy)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ConsoleGame Configuration
+        modelBuilder.Entity<ConsoleGame>(entity =>
+        {
+            entity.HasKey(e => e.GameId);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Platform).HasMaxLength(100);
+            entity.Property(e => e.Genre).HasMaxLength(50);
+            entity.Property(e => e.Rating).HasMaxLength(50);
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.ImageUrl).HasMaxLength(500);
+            entity.Property(e => e.Price).HasColumnType("decimal(18,2)");
+            entity.Property(e => e.GameTitle).HasMaxLength(200);
+            entity.Property(e => e.SizeGB).HasColumnType("decimal(18,2)");
+            entity.Property(e => e.Publisher).HasMaxLength(100);
+            entity.Property(e => e.Developer).HasMaxLength(100);
+        });
+
+        // TODO: Add InventoryMovement configuration back after resolving foreign key conflicts
+        /*
+        // InventoryMovement Configuration
+        modelBuilder.Entity<InventoryMovement>(entity =>
+        {
+            entity.HasKey(e => e.MovementId);
+            entity.Property(e => e.Reason).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Notes).HasMaxLength(500);
+            entity.Property(e => e.ReferenceNumber).HasMaxLength(100);
+            entity.Property(e => e.Supplier).HasMaxLength(100);
+            entity.Property(e => e.BatchNumber).HasMaxLength(100);
+            entity.Property(e => e.UnitCost).HasColumnType("decimal(18,2)");
+            entity.Property(e => e.TotalCost).HasColumnType("decimal(18,2)");
+
+            entity.HasOne(e => e.Product)
+                  .WithMany()
+                  .HasForeignKey(e => e.ProductId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.Creator)
+                  .WithMany()
+                  .HasForeignKey(e => e.CreatedBy)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+        */
 
         // Seed Data
         SeedData(modelBuilder);
