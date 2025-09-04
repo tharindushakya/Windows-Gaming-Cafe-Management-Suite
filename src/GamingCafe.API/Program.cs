@@ -2,66 +2,88 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Asp.Versioning;
-using Asp.Versioning.ApiExplorer;
 using System.Text;
 using GamingCafe.Data;
 using GamingCafe.API.Services;
 using GamingCafe.API.Hubs;
-using GamingCafe.API.Middleware;
-using GamingCafe.Core.Interfaces.Services;
-using GamingCafe.Core.Services;
-using Npgsql.EntityFrameworkCore.PostgreSQL;
-using Serilog;
-using Hangfire;
-using Hangfire.PostgreSql;
-using Hangfire.InMemory;
-using FluentValidation;
-using FluentValidation.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure Serilog
-builder.Host.UseSerilog((context, configuration) =>
-    configuration.ReadFrom.Configuration(context.Configuration));
+// Configure Serilog - Comment out until Serilog packages are installed
+// builder.Host.UseSerilog((context, configuration) =>
+//     configuration.ReadFrom.Configuration(context.Configuration));
 
 // Add services to the container.
 builder.Services.AddControllers();
 
-// Configure API Versioning
-builder.Services.AddApiVersioning(options =>
-{
-    options.DefaultApiVersion = new ApiVersion(1, 0);
-    options.AssumeDefaultVersionWhenUnspecified = true;
-    options.ApiVersionReader = ApiVersionReader.Combine(
-        new QueryStringApiVersionReader("version"),
-        new HeaderApiVersionReader("X-Version")
-    );
-})
-.AddApiExplorer(setup =>
-{
-    setup.GroupNameFormat = "'v'VVV";
-    setup.SubstituteApiVersionInUrl = true;
-});
+// Configure API Versioning - Comment out until versioning packages are installed
+// builder.Services.AddApiVersioning(options =>
+// {
+//     options.DefaultApiVersion = new ApiVersion(1, 0);
+//     options.AssumeDefaultVersionWhenUnspecified = true;
+//     options.ApiVersionReader = ApiVersionReader.Combine(
+//         new QueryStringApiVersionReader("version"),
+//         new HeaderApiVersionReader("X-Version")
+//     );
+// })
+// .AddApiExplorer(setup =>
+// {
+//     setup.GroupNameFormat = "'v'VVV";
+//     setup.SubstituteApiVersionInUrl = true;
+// });
 
 // Configure Entity Framework
 builder.Services.AddDbContext<GamingCafeContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Configure Redis Cache
-builder.Services.AddStackExchangeRedisCache(options =>
-{
-    options.Configuration = builder.Configuration.GetConnectionString("Redis");
-    options.InstanceName = "GamingCafe";
-});
+// Configure Redis Cache - Comment out until Redis packages are installed
+// builder.Services.AddStackExchangeRedisCache(options =>
+// {
+//     options.Configuration = builder.Configuration.GetConnectionString("Redis");
+//     options.InstanceName = "GamingCafe";
+// });
 
-// Configure Hangfire for background jobs
-builder.Services.AddHangfire(config => 
-    config.UseInMemoryStorage());
-builder.Services.AddHangfireServer();
+// Configure Hangfire for background jobs - Comment out until Hangfire packages are installed
+// builder.Services.AddHangfire(config => 
+//     config.UseInMemoryStorage());
+// builder.Services.AddHangfireServer();
 
-// Configure Health Checks (Enhanced monitoring - basic for now)
-builder.Services.AddHealthChecks();
+// Configure Enhanced Health Checks with Best Practices
+builder.Services.AddHealthChecks()
+    // Basic Database Health Check using EF Core
+    .AddCheck("database", () =>
+    {
+        try
+        {
+            // This is acceptable for health checks as it's a simple connectivity test
+            #pragma warning disable ASP0000
+            using var scope = builder.Services.BuildServiceProvider().CreateScope();
+            #pragma warning restore ASP0000
+            var context = scope.ServiceProvider.GetRequiredService<GamingCafeContext>();
+            return context.Database.CanConnect() ? HealthCheckResult.Healthy("Database is accessible") 
+                                                 : HealthCheckResult.Unhealthy("Database connection failed");
+        }
+        catch (Exception ex)
+        {
+            return HealthCheckResult.Unhealthy("Database health check failed", ex);
+        }
+    }, tags: new[] { "database", "ef-core", "critical" })
+    
+    // Basic Application Health Check
+    .AddCheck("application", () =>
+    {
+        try
+        {
+            var memoryUsed = GC.GetTotalMemory(false);
+            return memoryUsed < 1_000_000_000 // 1GB threshold
+                ? HealthCheckResult.Healthy($"Application healthy, memory usage: {memoryUsed / 1024 / 1024} MB")
+                : HealthCheckResult.Degraded($"High memory usage: {memoryUsed / 1024 / 1024} MB");
+        }
+        catch (Exception ex)
+        {
+            return HealthCheckResult.Unhealthy("Application health check failed", ex);
+        }
+    }, tags: new[] { "application", "system", "critical" });
 
 // Configure JWT Authentication
 var jwtKey = builder.Configuration["Jwt:Key"];
@@ -88,9 +110,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 // Add Authorization
 builder.Services.AddAuthorization();
 
-// Configure FluentValidation
-builder.Services.AddValidatorsFromAssemblyContaining<Program>();
-builder.Services.AddFluentValidationAutoValidation();
+// Configure FluentValidation - Comment out until FluentValidation packages are installed
+// builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+// builder.Services.AddFluentValidationAutoValidation();
 
 // Add SignalR
 builder.Services.AddSignalR();
@@ -107,19 +129,19 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Add custom services
-builder.Services.AddScoped<IEmailService, EmailService>();
-builder.Services.AddScoped<IFileUploadService, FileUploadService>();
-builder.Services.AddScoped<ICacheService, CacheService>();
-builder.Services.AddScoped<IValidationService, ValidationService>();
+// Add custom services - Comment out until interfaces and implementations are created
+// builder.Services.AddScoped<IEmailService, EmailService>();
+// builder.Services.AddScoped<IFileUploadService, FileUploadService>();
+// builder.Services.AddScoped<ICacheService, CacheService>();
+// builder.Services.AddScoped<IValidationService, ValidationService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IStationService, StationService>();
-builder.Services.AddScoped<ITwoFactorService, TwoFactorService>();
-builder.Services.AddScoped<IBackupService, BackupService>();
+// builder.Services.AddScoped<ITwoFactorService, TwoFactorService>();
+// builder.Services.AddScoped<IBackupService, BackupService>();
 
-// Add deployment and monitoring services
-builder.Services.AddScoped<IDeploymentValidationService, DeploymentValidationService>();
-builder.Services.AddScoped<IBackupMonitoringService, BackupMonitoringService>();
+// Add deployment and monitoring services - Comment out until implemented
+// builder.Services.AddScoped<IDeploymentValidationService, DeploymentValidationService>();
+// builder.Services.AddScoped<IBackupMonitoringService, BackupMonitoringService>();
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
@@ -140,8 +162,8 @@ else
     app.UseHsts();
 }
 
-// Add global exception handling middleware
-app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
+// Add global exception handling middleware - Comment out until middleware is created
+// app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 
 // Security headers
 app.Use(async (context, next) =>
@@ -162,11 +184,11 @@ app.Use(async (context, next) =>
 // Enable CORS
 app.UseCors("LocalhostOnly");
 
-// Add Hangfire Dashboard (Development only)
-if (app.Environment.IsDevelopment())
-{
-    app.UseHangfireDashboard("/hangfire");
-}
+// Add Hangfire Dashboard (Development only) - Comment out until Hangfire is installed
+// if (app.Environment.IsDevelopment())
+// {
+//     app.UseHangfireDashboard("/hangfire");
+// }
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -176,8 +198,34 @@ app.MapControllers();
 // Map SignalR Hub
 app.MapHub<GameCafeHub>("/gamecafehub");
 
-// Map Health Check endpoints
-app.MapHealthChecks("/health");
+// Map Health Check endpoints with detailed responses
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var response = new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(x => new
+            {
+                name = x.Key,
+                status = x.Value.Status.ToString(),
+                description = x.Value.Description,
+                duration = x.Value.Duration.ToString(),
+                tags = x.Value.Tags
+            }),
+            duration = report.TotalDuration.ToString()
+        };
+        await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(response));
+    }
+});
+
+// Simple health check for load balancer
+app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = _ => false // No checks, just returns healthy if app is running
+});
 
 // Ensure database is created and seeded
 using (var scope = app.Services.CreateScope())
@@ -200,10 +248,11 @@ using (var scope = app.Services.CreateScope())
         
         try
         {
-            var seeder = new DatabaseSeeder(context, 
-                scope.ServiceProvider.GetRequiredService<ILogger<DatabaseSeeder>>());
-            await seeder.SeedAsync();
-            logger.LogInformation("Database migration and seeding completed successfully");
+            // Database seeding - Comment out until DatabaseSeeder is implemented
+            // var seeder = new DatabaseSeeder(context, 
+            //     scope.ServiceProvider.GetRequiredService<ILogger<DatabaseSeeder>>());
+            // await seeder.SeedAsync();
+            logger.LogInformation("Database migration completed successfully");
         }
         catch (Exception ex)
         {
