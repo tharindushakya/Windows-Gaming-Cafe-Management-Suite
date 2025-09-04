@@ -117,6 +117,10 @@ builder.Services.AddScoped<IStationService, StationService>();
 builder.Services.AddScoped<ITwoFactorService, TwoFactorService>();
 builder.Services.AddScoped<IBackupService, BackupService>();
 
+// Add deployment and monitoring services
+builder.Services.AddScoped<IDeploymentValidationService, DeploymentValidationService>();
+builder.Services.AddScoped<IBackupMonitoringService, BackupMonitoringService>();
+
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
