@@ -106,6 +106,22 @@ public class EmailService : IEmailService
         return await SendEmailAsync(to, subject, body, true);
     }
 
+    public async Task<bool> SendEmailVerificationAsync(string to, string userName, string verificationToken)
+    {
+        var subject = "Verify Your Email Address";
+        var body = $@"
+            <h2>Verify Your Email Address</h2>
+            <p>Hi {userName},</p>
+            <p>Thank you for registering with Gaming Cafe. To complete your registration, please verify your email address.</p>
+            <p>Your verification token is: <strong>{verificationToken}</strong></p>
+            <p>This token will expire in 24 hours.</p>
+            <p>If you did not create this account, please ignore this email.</p>
+            <p>Thanks,<br>Gaming Cafe Team</p>
+        ";
+
+        return await SendEmailAsync(to, subject, body, true);
+    }
+
     public async Task<bool> SendLowBalanceNotificationAsync(string to, string userName, decimal currentBalance)
     {
         var subject = "Low Wallet Balance";

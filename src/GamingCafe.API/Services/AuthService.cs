@@ -1,5 +1,6 @@
 using GamingCafe.Core.Models;
 using GamingCafe.Core.DTOs;
+using GamingCafe.Core.Interfaces.Services;
 using GamingCafe.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -18,6 +19,8 @@ public interface IAuthService
     Task<User?> RegisterAsync(User user, string password);
     Task<bool> InitiatePasswordResetAsync(string email);
     Task<bool> ResetPasswordAsync(PasswordResetConfirmRequest request);
+    Task<bool> InitiateEmailVerificationAsync(string email);
+    Task<bool> VerifyEmailAsync(EmailVerificationConfirmRequest request);
     Task<User?> GetUserByIdAsync(int userId);
     Task<User?> GetUserByUsernameAsync(string username);
     Task<bool> RevokeRefreshTokenAsync(string refreshToken);
@@ -30,11 +33,13 @@ public class AuthService : IAuthService
 {
     private readonly GamingCafeContext _context;
     private readonly IConfiguration _configuration;
+    private readonly IServiceProvider _serviceProvider;
 
-    public AuthService(GamingCafeContext context, IConfiguration configuration)
+    public AuthService(GamingCafeContext context, IConfiguration configuration, IServiceProvider serviceProvider)
     {
         _context = context;
         _configuration = configuration;
+        _serviceProvider = serviceProvider;
     }
 
     public async Task<LoginResponse?> AuthenticateAsync(LoginRequest request)
@@ -45,12 +50,63 @@ public class AuthService : IAuthService
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             return null;
 
+        // Check if user has 2FA enabled
+        if (user.IsTwoFactorEnabled)
+        {
+            // If no 2FA code provided, return response indicating 2FA required
+            if (string.IsNullOrEmpty(request.TwoFactorCode) && string.IsNullOrEmpty(request.RecoveryCode))
+            {
+                var twoFactorToken = GenerateSecureToken();
+                // Store the 2FA token temporarily (you might want to use cache or database for this)
+                user.EmailVerificationToken = twoFactorToken; // Reusing this field for simplicity
+                user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddMinutes(5); // 5 minutes to complete 2FA
+                await _context.SaveChangesAsync();
+
+                return new LoginResponse
+                {
+                    RequiresTwoFactor = true,
+                    TwoFactorToken = twoFactorToken,
+                    User = new UserDto
+                    {
+                        UserId = user.UserId,
+                        Username = user.Username,
+                        Email = user.Email,
+                        FirstName = user.FirstName,
+                        LastName = user.LastName,
+                        Role = user.Role.ToString(),
+                        WalletBalance = user.WalletBalance,
+                        LoyaltyPoints = user.LoyaltyPoints,
+                        IsTwoFactorEnabled = user.IsTwoFactorEnabled
+                    }
+                };
+            }
+
+            // Verify 2FA code or recovery code
+            bool isValidTwoFactor = false;
+            if (!string.IsNullOrEmpty(request.TwoFactorCode))
+            {
+                var twoFactorService = _serviceProvider.GetRequiredService<ITwoFactorService>();
+                isValidTwoFactor = await twoFactorService.VerifyTwoFactorAsync(user.UserId, request.TwoFactorCode);
+            }
+            else if (!string.IsNullOrEmpty(request.RecoveryCode))
+            {
+                var twoFactorService = _serviceProvider.GetRequiredService<ITwoFactorService>();
+                isValidTwoFactor = await twoFactorService.VerifyRecoveryCodeAsync(user.UserId, request.RecoveryCode);
+            }
+
+            if (!isValidTwoFactor)
+                return null;
+        }
+
         var accessToken = GenerateJwtToken(user);
         var refreshToken = GenerateRefreshToken();
 
         user.RefreshToken = refreshToken;
         user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7); // 7 days
         user.LastLoginAt = DateTime.UtcNow;
+        // Clear temporary 2FA token
+        user.EmailVerificationToken = null;
+        user.EmailVerificationTokenExpiry = null;
 
         await _context.SaveChangesAsync();
 
@@ -59,6 +115,7 @@ public class AuthService : IAuthService
             AccessToken = accessToken,
             RefreshToken = refreshToken,
             ExpiresAt = DateTime.UtcNow.AddMinutes(15), // JWT expires in 15 minutes
+            RequiresTwoFactor = false,
             User = new UserDto
             {
                 UserId = user.UserId,
@@ -68,7 +125,8 @@ public class AuthService : IAuthService
                 LastName = user.LastName,
                 Role = user.Role.ToString(),
                 WalletBalance = user.WalletBalance,
-                LoyaltyPoints = user.LoyaltyPoints
+                LoyaltyPoints = user.LoyaltyPoints,
+                IsTwoFactorEnabled = user.IsTwoFactorEnabled
             }
         };
     }
@@ -138,6 +196,43 @@ public class AuthService : IAuthService
         user.PasswordResetToken = null;
         user.PasswordResetTokenExpiry = null;
         user.RefreshToken = null; // Invalidate all refresh tokens
+
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> InitiateEmailVerificationAsync(string email)
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+        if (user == null || user.IsEmailVerified)
+            return false;
+
+        var verificationToken = GenerateSecureToken();
+        user.EmailVerificationToken = verificationToken;
+        user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
+
+        await _context.SaveChangesAsync();
+
+        // Send verification email
+        var emailService = _serviceProvider.GetRequiredService<IEmailService>();
+        await emailService.SendEmailVerificationAsync(user.Email, user.Username, verificationToken);
+
+        return true;
+    }
+
+    public async Task<bool> VerifyEmailAsync(EmailVerificationConfirmRequest request)
+    {
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.Email == request.Email && 
+                                    u.EmailVerificationToken == request.Token &&
+                                    u.EmailVerificationTokenExpiry > DateTime.UtcNow);
+
+        if (user == null || user.IsEmailVerified)
+            return false;
+
+        user.IsEmailVerified = true;
+        user.EmailVerificationToken = null;
+        user.EmailVerificationTokenExpiry = null;
 
         await _context.SaveChangesAsync();
         return true;
@@ -240,6 +335,14 @@ public class AuthService : IAuthService
         using var rng = RandomNumberGenerator.Create();
         rng.GetBytes(randomNumber);
         return Convert.ToBase64String(randomNumber);
+    }
+
+    private string GenerateSecureToken()
+    {
+        var randomNumber = new byte[16];
+        using var rng = RandomNumberGenerator.Create();
+        rng.GetBytes(randomNumber);
+        return Convert.ToBase64String(randomNumber).Replace("+", "").Replace("/", "").Replace("=", "");
     }
 
     private string GeneratePasswordResetToken()

@@ -3,6 +3,7 @@ using System;
 using GamingCafe.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,13 +12,15 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GamingCafe.Data.Migrations
 {
     [DbContext(typeof(GamingCafeContext))]
-    partial class GamingCafeContextModelSnapshot : ModelSnapshot
+    [Migration("20250904171220_AddEmailVerificationFields")]
+    partial class AddEmailVerificationFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.11")
+                .HasAnnotation("ProductVersion", "8.0.10")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -918,9 +921,6 @@ namespace GamingCafe.Data.Migrations
                     b.Property<bool>("IsEmailVerified")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("IsTwoFactorEnabled")
-                        .HasColumnType("boolean");
-
                     b.Property<DateTime?>("LastLoginAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -961,12 +961,6 @@ namespace GamingCafe.Data.Migrations
 
                     b.Property<int>("Role")
                         .HasColumnType("integer");
-
-                    b.Property<string>("TwoFactorRecoveryCode")
-                        .HasColumnType("text");
-
-                    b.Property<string>("TwoFactorSecretKey")
-                        .HasColumnType("text");
 
                     b.Property<string>("Username")
                         .IsRequired()

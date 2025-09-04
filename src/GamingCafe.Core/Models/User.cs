@@ -38,6 +38,16 @@ public class User
     public DateTime? RefreshTokenExpiryTime { get; set; }
     public string? PasswordResetToken { get; set; }
     public DateTime? PasswordResetTokenExpiry { get; set; }
+    
+    // Email verification
+    public bool IsEmailVerified { get; set; } = false;
+    public string? EmailVerificationToken { get; set; }
+    public DateTime? EmailVerificationTokenExpiry { get; set; }
+    
+    // Two-Factor Authentication
+    public bool IsTwoFactorEnabled { get; set; } = false;
+    public string? TwoFactorSecretKey { get; set; }
+    public string? TwoFactorRecoveryCode { get; set; }
 
     // Wallet and Loyalty
     public decimal WalletBalance { get; set; } = 0;

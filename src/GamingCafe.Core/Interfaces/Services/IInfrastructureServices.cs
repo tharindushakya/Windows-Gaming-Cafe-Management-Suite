@@ -1,4 +1,5 @@
 using GamingCafe.Core.Models;
+using GamingCafe.Core.DTOs;
 
 namespace GamingCafe.Core.Interfaces.Services;
 
@@ -40,6 +41,7 @@ public interface IEmailService
     Task<bool> SendWelcomeEmailAsync(string to, string userName);
     Task<bool> SendReservationConfirmationAsync(string to, string userName, DateTime startTime, DateTime endTime, string stationName);
     Task<bool> SendPasswordResetEmailAsync(string to, string resetToken);
+    Task<bool> SendEmailVerificationAsync(string to, string userName, string verificationToken);
     Task<bool> SendLowBalanceNotificationAsync(string to, string userName, decimal currentBalance);
 }
 
@@ -79,6 +81,18 @@ public interface IHealthCheckService
     Task<bool> CheckDatabaseHealthAsync();
     Task<bool> CheckCacheHealthAsync();
     Task<bool> CheckExternalServicesHealthAsync();
+}
+
+public interface ITwoFactorService
+{
+    // Two-Factor Authentication
+    Task<TwoFactorSetupResponse> SetupTwoFactorAsync(int userId, string password);
+    Task<bool> VerifyTwoFactorAsync(int userId, string code);
+    Task<bool> VerifyRecoveryCodeAsync(int userId, string recoveryCode);
+    Task<bool> DisableTwoFactorAsync(int userId, string password);
+    Task<TwoFactorRecoveryCodesResponse> GenerateNewRecoveryCodesAsync(int userId);
+    Task<bool> IsTwoFactorEnabledAsync(int userId);
+    string GenerateQrCodeDataUrl(string email, string secretKey);
 }
 
 public interface IBackupService

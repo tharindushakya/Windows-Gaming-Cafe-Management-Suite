@@ -114,6 +114,7 @@ builder.Services.AddScoped<ICacheService, CacheService>();
 builder.Services.AddScoped<IValidationService, ValidationService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IStationService, StationService>();
+builder.Services.AddScoped<ITwoFactorService, TwoFactorService>();
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();

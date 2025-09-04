@@ -4,6 +4,7 @@ using Asp.Versioning;
 using GamingCafe.API.Services;
 using GamingCafe.Core.Models;
 using GamingCafe.Core.DTOs;
+using GamingCafe.Core.Interfaces.Services;
 
 namespace GamingCafe.API.Controllers;
 
@@ -140,6 +141,166 @@ public class AuthController : ControllerBase
         }
 
         return Ok(new { message = "Logged out successfully" });
+    }
+
+    [HttpPost("send-verification-email")]
+    public async Task<IActionResult> SendVerificationEmail([FromBody] EmailVerificationRequest request)
+    {
+        if (string.IsNullOrEmpty(request.Email))
+            return BadRequest("Email is required");
+
+        var result = await _authService.InitiateEmailVerificationAsync(request.Email);
+        if (!result)
+            return BadRequest("Email not found or already verified");
+
+        return Ok(new { message = "Verification email sent successfully" });
+    }
+
+    [HttpPost("verify-email")]
+    public async Task<IActionResult> VerifyEmail([FromBody] EmailVerificationConfirmRequest request)
+    {
+        if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Token))
+            return BadRequest("Email and verification token are required");
+
+        var result = await _authService.VerifyEmailAsync(request);
+        if (!result)
+            return BadRequest("Invalid or expired verification token");
+
+        return Ok(new { message = "Email verified successfully" });
+    }
+
+    [HttpPost("setup-2fa")]
+    [Authorize]
+    public async Task<IActionResult> SetupTwoFactor([FromBody] TwoFactorSetupRequest request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            return Unauthorized();
+
+        try
+        {
+            var twoFactorService = HttpContext.RequestServices.GetRequiredService<ITwoFactorService>();
+            var response = await twoFactorService.SetupTwoFactorAsync(userId, request.Password);
+            return Ok(response);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return BadRequest("Invalid password");
+        }
+        catch (Exception ex)
+        {
+            return BadRequest($"Error setting up 2FA: {ex.Message}");
+        }
+    }
+
+    [HttpPost("verify-2fa")]
+    [Authorize]
+    public async Task<IActionResult> VerifyTwoFactor([FromBody] TwoFactorVerifyRequest request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            return Unauthorized();
+
+        try
+        {
+            var twoFactorService = HttpContext.RequestServices.GetRequiredService<ITwoFactorService>();
+            
+            bool isValid = false;
+            if (!string.IsNullOrEmpty(request.Code))
+            {
+                isValid = await twoFactorService.VerifyTwoFactorAsync(userId, request.Code);
+            }
+            else if (!string.IsNullOrEmpty(request.RecoveryCode))
+            {
+                isValid = await twoFactorService.VerifyRecoveryCodeAsync(userId, request.RecoveryCode);
+            }
+
+            if (isValid)
+                return Ok(new { message = "Two-factor code verified successfully" });
+            else
+                return BadRequest("Invalid two-factor code");
+        }
+        catch (Exception ex)
+        {
+            return BadRequest($"Error verifying 2FA: {ex.Message}");
+        }
+    }
+
+    [HttpPost("disable-2fa")]
+    [Authorize]
+    public async Task<IActionResult> DisableTwoFactor([FromBody] TwoFactorDisableRequest request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            return Unauthorized();
+
+        try
+        {
+            var twoFactorService = HttpContext.RequestServices.GetRequiredService<ITwoFactorService>();
+            var result = await twoFactorService.DisableTwoFactorAsync(userId, request.Password);
+            
+            if (result)
+                return Ok(new { message = "Two-factor authentication disabled successfully" });
+            else
+                return BadRequest("Failed to disable two-factor authentication");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return BadRequest("Invalid password");
+        }
+        catch (Exception ex)
+        {
+            return BadRequest($"Error disabling 2FA: {ex.Message}");
+        }
+    }
+
+    [HttpPost("generate-recovery-codes")]
+    [Authorize]
+    public async Task<IActionResult> GenerateRecoveryCodes()
+    {
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            return Unauthorized();
+
+        try
+        {
+            var twoFactorService = HttpContext.RequestServices.GetRequiredService<ITwoFactorService>();
+            var response = await twoFactorService.GenerateNewRecoveryCodesAsync(userId);
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest($"Error generating recovery codes: {ex.Message}");
+        }
+    }
+
+    [HttpGet("2fa-status")]
+    [Authorize]
+    public async Task<IActionResult> GetTwoFactorStatus()
+    {
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            return Unauthorized();
+
+        try
+        {
+            var twoFactorService = HttpContext.RequestServices.GetRequiredService<ITwoFactorService>();
+            var isEnabled = await twoFactorService.IsTwoFactorEnabledAsync(userId);
+            return Ok(new { isTwoFactorEnabled = isEnabled });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest($"Error checking 2FA status: {ex.Message}");
+        }
     }
 }
 
