@@ -4,6 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using System.Text;
 using GamingCafe.Data;
+using GamingCafe.Data.Services;
 using GamingCafe.API.Services;
 using GamingCafe.API.Hubs;
 using GamingCafe.Core.Interfaces.Services;
@@ -224,7 +225,8 @@ builder.Services.AddScoped<ICacheService, CacheService>();
 // builder.Services.AddScoped<IValidationService, ValidationService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IStationService, StationService>();
-builder.Services.AddScoped<ITwoFactorService, TwoFactorService>();
+builder.Services.AddScoped<ITwoFactorService, GamingCafe.Data.Services.TwoFactorService>();
+builder.Services.AddScoped<IAuditService, GamingCafe.Data.Services.AuditService>();
 // builder.Services.AddScoped<IBackupService, BackupService>();
 
 // Add deployment and monitoring services - Comment out until implemented

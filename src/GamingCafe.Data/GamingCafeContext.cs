@@ -35,6 +35,9 @@ public class GamingCafeContext : DbContext
     public DbSet<LoyaltyReward> LoyaltyRewards { get; set; }
     public DbSet<LoyaltyRedemption> LoyaltyRedemptions { get; set; }
 
+    // Audit Logging
+    public DbSet<AuditLog> AuditLogs { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         base.OnConfiguring(optionsBuilder);
@@ -342,6 +345,25 @@ public class GamingCafeContext : DbContext
                   .OnDelete(DeleteBehavior.SetNull);
         });
         */
+
+        // Audit Log Configuration
+        modelBuilder.Entity<AuditLog>(entity =>
+        {
+            entity.HasKey(e => e.AuditLogId);
+            entity.Property(e => e.Action).HasMaxLength(100);
+            entity.Property(e => e.EntityType).HasMaxLength(100);
+            entity.Property(e => e.IpAddress).HasMaxLength(45);
+            entity.Property(e => e.UserAgent).HasMaxLength(500);
+            entity.Property(e => e.Details).HasColumnType("nvarchar(max)");
+            
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => e.Timestamp);
+            entity.HasIndex(e => new { e.EntityType, e.EntityId });
+        });
 
         // Seed Data
         SeedData(modelBuilder);
