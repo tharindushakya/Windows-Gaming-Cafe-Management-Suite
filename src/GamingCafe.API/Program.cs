@@ -8,6 +8,7 @@ using GamingCafe.API.Services;
 using GamingCafe.API.Hubs;
 using GamingCafe.Core.Interfaces.Services;
 using GamingCafe.Core.Services;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -38,12 +39,37 @@ builder.Services.AddControllers();
 builder.Services.AddDbContext<GamingCafeContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Configure Redis Cache - Comment out until Redis packages are installed
-// builder.Services.AddStackExchangeRedisCache(options =>
-// {
-//     options.Configuration = builder.Configuration.GetConnectionString("Redis");
-//     options.InstanceName = "GamingCafe";
-// });
+// Configure Redis Cache
+try
+{
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
+        options.InstanceName = "GamingCafe";
+    });
+
+    // Register Redis ConnectionMultiplexer for advanced operations
+    builder.Services.AddSingleton<IConnectionMultiplexer>(provider =>
+    {
+        try
+        {
+            var connectionString = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
+            return ConnectionMultiplexer.Connect(connectionString);
+        }
+        catch (Exception ex)
+        {
+            var logger = provider.GetService<ILogger<Program>>();
+            logger?.LogWarning(ex, "Failed to connect to Redis at startup. Cache will fall back to in-memory.");
+            return null!; // Return null, CacheService will handle gracefully
+        }
+    });
+}
+catch (Exception ex)
+{
+    // If Redis setup fails completely, log and continue without Redis
+    var logger = LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<Program>();
+    logger.LogWarning(ex, "Redis setup failed. Application will run without Redis cache.");
+}
 
 // Configure Hangfire for background jobs - Comment out until Hangfire packages are installed
 // builder.Services.AddHangfire(config => 
@@ -106,7 +132,46 @@ builder.Services.AddHealthChecks()
         {
             return HealthCheckResult.Unhealthy("Email health check failed", ex);
         }
-    }, tags: new[] { "email", "smtp", "external" });
+    }, tags: new[] { "email", "smtp", "external" })
+    
+    // Redis Cache Health Check
+    .AddCheck("redis", () =>
+    {
+        try
+        {
+            #pragma warning disable ASP0000
+            using var scope = builder.Services.BuildServiceProvider().CreateScope();
+            #pragma warning restore ASP0000
+            var redis = scope.ServiceProvider.GetService<IConnectionMultiplexer>();
+            
+            if (redis == null)
+            {
+                return HealthCheckResult.Degraded("Redis not configured - falling back to in-memory cache");
+            }
+            
+            if (!redis.IsConnected)
+            {
+                return HealthCheckResult.Degraded("Redis not connected - falling back to in-memory cache");
+            }
+            
+            var database = redis.GetDatabase();
+            var testKey = "health_check_" + Guid.NewGuid();
+            var testValue = "test";
+            
+            // Test set and get operations
+            database.StringSet(testKey, testValue);
+            var retrievedValue = database.StringGet(testKey);
+            database.KeyDelete(testKey);
+            
+            return retrievedValue == testValue 
+                ? HealthCheckResult.Healthy("Redis is connected and responding")
+                : HealthCheckResult.Degraded("Redis operations failed - falling back to in-memory cache");
+        }
+        catch (Exception ex)
+        {
+            return HealthCheckResult.Degraded($"Redis unavailable - falling back to in-memory cache: {ex.Message}");
+        }
+    }, tags: new[] { "redis", "cache", "optional" });
 
 // Configure JWT Authentication
 var jwtKey = builder.Configuration["Jwt:Key"];
@@ -155,11 +220,11 @@ builder.Services.AddCors(options =>
 // Add custom services - Comment out until interfaces and implementations are created
 builder.Services.AddScoped<IEmailService, EmailService>();
 // builder.Services.AddScoped<IFileUploadService, FileUploadService>();
-// builder.Services.AddScoped<ICacheService, CacheService>();
+builder.Services.AddScoped<ICacheService, CacheService>();
 // builder.Services.AddScoped<IValidationService, ValidationService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IStationService, StationService>();
-// builder.Services.AddScoped<ITwoFactorService, TwoFactorService>();
+builder.Services.AddScoped<ITwoFactorService, TwoFactorService>();
 // builder.Services.AddScoped<IBackupService, BackupService>();
 
 // Add deployment and monitoring services - Comment out until implemented
