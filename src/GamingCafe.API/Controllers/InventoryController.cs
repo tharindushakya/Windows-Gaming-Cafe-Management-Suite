@@ -311,14 +311,14 @@ public class InventoryController : ControllerBase
     /// </summary>
     [HttpGet("low-stock")]
     [Authorize(Roles = "Admin,Manager,Staff")]
-    public async Task<ActionResult<List<LowStockProductDto>>> GetLowStockProducts()
+    public async Task<ActionResult<List<InventoryLowStockProductDto>>> GetLowStockProducts()
     {
         try
         {
             var products = await _unitOfWork.Repository<Product>().GetAllAsync();
             var lowStockProducts = products
                 .Where(p => p.IsActive && p.StockQuantity <= p.MinStockLevel)
-                .Select(p => new LowStockProductDto
+                .Select(p => new InventoryLowStockProductDto
                 {
                     ProductId = p.ProductId,
                     ProductName = p.Name,
@@ -463,7 +463,7 @@ public class InventoryAdjustmentResponseDto
     public int MovementId { get; set; }
 }
 
-public class LowStockProductDto
+public class InventoryLowStockProductDto
 {
     public int ProductId { get; set; }
     public string ProductName { get; set; } = string.Empty;
