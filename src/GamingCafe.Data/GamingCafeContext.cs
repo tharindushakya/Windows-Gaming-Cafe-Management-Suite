@@ -354,7 +354,7 @@ public class GamingCafeContext : DbContext
             entity.Property(e => e.EntityType).HasMaxLength(100);
             entity.Property(e => e.IpAddress).HasMaxLength(45);
             entity.Property(e => e.UserAgent).HasMaxLength(500);
-            entity.Property(e => e.Details).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.Details).HasColumnType("text");
             
             entity.HasOne(e => e.User)
                   .WithMany()

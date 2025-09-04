@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 using Hangfire;
 
@@ -56,49 +57,57 @@ public class BackupService : IBackupService
             var username = connectionBuilder.Username;
             var password = connectionBuilder.Password;
 
-            // Use pg_dump to create backup
-            var pgDumpPath = GetPgDumpPath();
-            var arguments = $"-h {host} -p {port} -U {username} -d {databaseName} -f \"{backupPath}\" --verbose --clean --create";
-            
-            var processInfo = new ProcessStartInfo
+            try
             {
-                FileName = pgDumpPath,
-                Arguments = arguments,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
+                // Use pg_dump to create backup
+                var pgDumpPath = GetPgDumpPath();
+                var arguments = $"-h {host} -p {port} -U {username} -d {databaseName} -f \"{backupPath}\" --verbose --clean --create";
+                
+                var processInfo = new ProcessStartInfo
+                {
+                    FileName = pgDumpPath,
+                    Arguments = arguments,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
 
-            // Set password environment variable
-            processInfo.EnvironmentVariables["PGPASSWORD"] = password;
+                // Set password environment variable
+                processInfo.EnvironmentVariables["PGPASSWORD"] = password;
 
-            using var process = Process.Start(processInfo);
-            if (process == null)
-            {
-                _logger.LogError("Failed to start pg_dump process");
-                return false;
-            }
+                using var process = Process.Start(processInfo);
+                if (process == null)
+                {
+                    _logger.LogError("Failed to start pg_dump process");
+                    return false;
+                }
 
-            await process.WaitForExitAsync();
-            
-            if (process.ExitCode == 0 && File.Exists(backupPath))
-            {
-                var fileInfo = new FileInfo(backupPath);
-                _logger.LogInformation(
-                    "Backup created successfully: {BackupPath}, Size: {Size:N0} bytes", 
-                    backupPath, 
-                    fileInfo.Length);
-                return true;
+                await process.WaitForExitAsync();
+                
+                if (process.ExitCode == 0 && File.Exists(backupPath))
+                {
+                    var fileInfo = new FileInfo(backupPath);
+                    _logger.LogInformation(
+                        "Backup created successfully: {BackupPath}, Size: {Size:N0} bytes", 
+                        backupPath, 
+                        fileInfo.Length);
+                    return true;
+                }
+                else
+                {
+                    var error = await process.StandardError.ReadToEndAsync();
+                    _logger.LogError("Backup failed. Exit code: {ExitCode}, Error: {Error}", 
+                        process.ExitCode, error);
+                    return false;
+                }
             }
-            else
+            catch (Exception ex) when (ex is FileNotFoundException || ex is System.ComponentModel.Win32Exception)
             {
-                var error = await process.StandardError.ReadToEndAsync();
-                _logger.LogError("Backup failed. Exit code: {ExitCode}, Error: {Error}", 
-                    process.ExitCode, error);
-                return false;
+                _logger.LogWarning(ex, "pg_dump not found or cannot be started — falling back to programmatic backup.");
+                return await ProgrammaticBackupAsync(backupPath);
             }
-        }
+            }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error creating backup: {BackupName}", backupName);
@@ -132,43 +141,51 @@ public class BackupService : IBackupService
             var username = connectionBuilder.Username;
             var password = connectionBuilder.Password;
 
-            // Use psql to restore backup
-            var psqlPath = GetPsqlPath();
-            var arguments = $"-h {host} -p {port} -U {username} -d {databaseName} -f \"{backupPath}\" --verbose";
-            
-            var processInfo = new ProcessStartInfo
+            try
             {
-                FileName = psqlPath,
-                Arguments = arguments,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
+                // Use psql to restore backup
+                var psqlPath = GetPsqlPath();
+                var arguments = $"-h {host} -p {port} -U {username} -d {databaseName} -f \"{backupPath}\" --verbose";
+                
+                var processInfo = new ProcessStartInfo
+                {
+                    FileName = psqlPath,
+                    Arguments = arguments,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
 
-            // Set password environment variable
-            processInfo.EnvironmentVariables["PGPASSWORD"] = password;
+                // Set password environment variable
+                processInfo.EnvironmentVariables["PGPASSWORD"] = password;
 
-            using var process = Process.Start(processInfo);
-            if (process == null)
-            {
-                _logger.LogError("Failed to start psql process");
-                return false;
+                using var process = Process.Start(processInfo);
+                if (process == null)
+                {
+                    _logger.LogError("Failed to start psql process");
+                    return false;
+                }
+
+                await process.WaitForExitAsync();
+                
+                if (process.ExitCode == 0)
+                {
+                    _logger.LogInformation("Backup restored successfully: {BackupPath}", backupPath);
+                    return true;
+                }
+                else
+                {
+                    var error = await process.StandardError.ReadToEndAsync();
+                    _logger.LogError("Restore failed. Exit code: {ExitCode}, Error: {Error}", 
+                        process.ExitCode, error);
+                    return false;
+                }
             }
-
-            await process.WaitForExitAsync();
-            
-            if (process.ExitCode == 0)
+            catch (FileNotFoundException fnf)
             {
-                _logger.LogInformation("Backup restored successfully: {BackupPath}", backupPath);
-                return true;
-            }
-            else
-            {
-                var error = await process.StandardError.ReadToEndAsync();
-                _logger.LogError("Restore failed. Exit code: {ExitCode}, Error: {Error}", 
-                    process.ExitCode, error);
-                return false;
+                _logger.LogWarning(fnf, "psql not found — falling back to programmatic restore.");
+                return await ProgrammaticRestoreAsync(backupPath);
             }
         }
         catch (Exception ex)
@@ -315,10 +332,11 @@ public class BackupService : IBackupService
 
     private string GetPgDumpPath()
     {
-        // Try to find pg_dump in common locations
-        var possiblePaths = new[]
+        // Prefer explicit known installation paths first (Windows).
+        var exeName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "pg_dump.exe" : "pg_dump";
+
+        var explicitPaths = new[]
         {
-            "pg_dump", // If in PATH
             @"C:\Program Files\PostgreSQL\17\bin\pg_dump.exe",
             @"C:\Program Files\PostgreSQL\16\bin\pg_dump.exe",
             @"C:\Program Files\PostgreSQL\15\bin\pg_dump.exe",
@@ -326,23 +344,35 @@ public class BackupService : IBackupService
             @"C:\PostgreSQL\bin\pg_dump.exe"
         };
 
-        foreach (var path in possiblePaths)
+        foreach (var p in explicitPaths)
         {
-            if (File.Exists(path) || path == "pg_dump")
-            {
-                return path;
-            }
+            if (File.Exists(p))
+                return p;
         }
 
-        throw new FileNotFoundException("pg_dump executable not found. Please ensure PostgreSQL client tools are installed.");
+        // Search PATH for the executable
+        var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        foreach (var dir in pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            try
+            {
+                var candidate = Path.Combine(dir.Trim(), exeName);
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+            catch { }
+        }
+
+        // Last resort: return the bare executable name and let Process.Start resolve it (may fail if not in PATH)
+        return exeName;
     }
 
     private string GetPsqlPath()
     {
-        // Try to find psql in common locations
-        var possiblePaths = new[]
+        var exeName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "psql.exe" : "psql";
+
+        var explicitPaths = new[]
         {
-            "psql", // If in PATH
             @"C:\Program Files\PostgreSQL\17\bin\psql.exe",
             @"C:\Program Files\PostgreSQL\16\bin\psql.exe",
             @"C:\Program Files\PostgreSQL\15\bin\psql.exe",
@@ -350,15 +380,25 @@ public class BackupService : IBackupService
             @"C:\PostgreSQL\bin\psql.exe"
         };
 
-        foreach (var path in possiblePaths)
+        foreach (var p in explicitPaths)
         {
-            if (File.Exists(path) || path == "psql")
-            {
-                return path;
-            }
+            if (File.Exists(p))
+                return p;
         }
 
-        throw new FileNotFoundException("psql executable not found. Please ensure PostgreSQL client tools are installed.");
+        var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        foreach (var dir in pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            try
+            {
+                var candidate = Path.Combine(dir.Trim(), exeName);
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+            catch { }
+        }
+
+        return exeName;
     }
 
     private static string FormatFileSize(long bytes)
@@ -372,5 +412,125 @@ public class BackupService : IBackupService
             len = len / 1024;
         }
         return $"{len:0.##} {sizes[order]}";
+    }
+
+    // Fallback programmatic backup (simple INSERT-based dump). Works for development and small DBs.
+    private async Task<bool> ProgrammaticBackupAsync(string backupPath)
+    {
+        try
+        {
+            _logger.LogInformation("Creating programmatic backup to {BackupPath}", backupPath);
+
+            // We'll export schema-less data as INSERT statements. This is intentionally simple and
+            // works best for small development databases. For production please use pg_dump.
+
+            await using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+
+            var tables = new List<string>();
+            await using (var cmd = new NpgsqlCommand(@"SELECT tablename FROM pg_tables WHERE schemaname = 'public';", conn))
+            await using (var reader = await cmd.ExecuteReaderAsync())
+            {
+                while (await reader.ReadAsync())
+                {
+                    var tbl = reader.IsDBNull(0) ? null : reader.GetString(0);
+                    if (!string.IsNullOrEmpty(tbl)) tables.Add(tbl!);
+                }
+            }
+
+            var sb = new StringBuilder();
+            sb.AppendLine("BEGIN;");
+
+            foreach (var table in tables)
+            {
+                sb.AppendLine($"-- Data for table {table}");
+
+                // Read rows
+                var selectSql = $"SELECT * FROM \"{table}\";";
+                await using var selectCmd = new NpgsqlCommand(selectSql, conn);
+                await using var r = await selectCmd.ExecuteReaderAsync();
+
+                var columnNames = new List<string>();
+                for (int i = 0; i < r.FieldCount; i++)
+                {
+                    var name = r.GetName(i);
+                    if (!string.IsNullOrEmpty(name)) columnNames.Add(name);
+                }
+
+                while (await r.ReadAsync())
+                {
+                    var values = new List<string>();
+                    for (int i = 0; i < r.FieldCount; i++)
+                    {
+                        if (r.IsDBNull(i))
+                        {
+                            values.Add("NULL");
+                            continue;
+                        }
+
+                        var val = r.GetValue(i);
+                        // Basic quoting/escaping — not exhaustive but sufficient for dev data types
+                        if (val is string s)
+                        {
+                            values.Add("'" + s.Replace("'", "''") + "'");
+                        }
+                        else if (val is DateTime dt)
+                        {
+                            values.Add("'" + dt.ToString("o") + "'");
+                        }
+                        else if (val is bool b)
+                        {
+                            values.Add(b ? "TRUE" : "FALSE");
+                        }
+                        else
+                        {
+                            values.Add(val?.ToString() ?? "NULL");
+                        }
+                    }
+
+                    var cols = string.Join(", ", columnNames.Select(c => $"\"{c}\""));
+                    var vals = string.Join(", ", values);
+                    sb.AppendLine($"INSERT INTO \"{table}\" ({cols}) VALUES ({vals});");
+                }
+            }
+
+            sb.AppendLine("COMMIT;");
+
+            await File.WriteAllTextAsync(backupPath, sb.ToString());
+
+            _logger.LogInformation("Programmatic backup written to {BackupPath}", backupPath);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Programmatic backup failed");
+            return false;
+        }
+    }
+
+    // Fallback programmatic restore — executes SQL file using Npgsql
+    private async Task<bool> ProgrammaticRestoreAsync(string backupPath)
+    {
+        try
+        {
+            _logger.LogInformation("Starting programmatic restore from {BackupPath}", backupPath);
+
+            var sql = await File.ReadAllTextAsync(backupPath);
+
+            await using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+
+            // Execute as a single batch
+            await using var cmd = new NpgsqlCommand(sql, conn) { CommandTimeout = 0 };
+            await cmd.ExecuteNonQueryAsync();
+
+            _logger.LogInformation("Programmatic restore completed from {BackupPath}", backupPath);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Programmatic restore failed");
+            return false;
+        }
     }
 }

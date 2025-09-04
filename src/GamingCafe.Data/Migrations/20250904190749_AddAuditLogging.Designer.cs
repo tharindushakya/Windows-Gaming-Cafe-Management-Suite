@@ -39,7 +39,7 @@ namespace GamingCafe.Data.Migrations
                         .HasColumnType("character varying(100)");
 
                     b.Property<string>("Details")
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("text");
 
                     b.Property<int?>("EntityId")
                         .HasColumnType("integer");

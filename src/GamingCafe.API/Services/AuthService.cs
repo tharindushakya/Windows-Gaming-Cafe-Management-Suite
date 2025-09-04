@@ -176,8 +176,19 @@ public class AuthService : IAuthService
 
         await _context.SaveChangesAsync();
 
-        // TODO: Send email with reset token
-        // await _emailService.SendPasswordResetEmailAsync(email, resetToken);
+        // Send password reset email
+        try
+        {
+            var emailService = _serviceProvider.GetService<IEmailService>();
+            if (emailService != null)
+            {
+                await emailService.SendPasswordResetEmailAsync(email, resetToken);
+            }
+        }
+        catch (Exception)
+        {
+            // Log later if necessary; we don't block reset for email failures
+        }
 
         return true;
     }
@@ -281,6 +292,23 @@ public class AuthService : IAuthService
 
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
+
+        // Send welcome email and initiate email verification
+        try
+        {
+            var emailService = _serviceProvider.GetService<IEmailService>();
+            if (emailService != null)
+            {
+                _ = Task.Run(async () => await emailService.SendWelcomeEmailAsync(user.Email, user.Username));
+            }
+
+            // Initiate email verification (stores token and sends verification email)
+            _ = Task.Run(async () => await InitiateEmailVerificationAsync(user.Email));
+        }
+        catch
+        {
+            // Non-fatal: registration succeeded even if emails fail
+        }
 
         return user;
     }

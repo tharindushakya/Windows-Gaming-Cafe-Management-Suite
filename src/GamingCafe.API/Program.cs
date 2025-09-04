@@ -9,6 +9,11 @@ using GamingCafe.API.Services;
 using GamingCafe.API.Middleware;
 using GamingCafe.API.Hubs;
 using Hangfire;
+using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
+using Microsoft.AspNetCore.Mvc.ApiExplorer;
+using FluentValidation;
+using FluentValidation.AspNetCore;
 using GamingCafe.Core.Interfaces.Services;
 using GamingCafe.Core.Services;
 using StackExchange.Redis;
@@ -22,21 +27,21 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddControllers();
 
-// Configure API Versioning - Comment out until versioning packages are installed
-// builder.Services.AddApiVersioning(options =>
-// {
-//     options.DefaultApiVersion = new ApiVersion(1, 0);
-//     options.AssumeDefaultVersionWhenUnspecified = true;
-//     options.ApiVersionReader = ApiVersionReader.Combine(
-//         new QueryStringApiVersionReader("version"),
-//         new HeaderApiVersionReader("X-Version")
-//     );
-// })
-// .AddApiExplorer(setup =>
-// {
-//     setup.GroupNameFormat = "'v'VVV";
-//     setup.SubstituteApiVersionInUrl = true;
-// });
+// Configure API Versioning
+builder.Services.AddApiVersioning(options =>
+{
+    options.DefaultApiVersion = new ApiVersion(1, 0);
+    options.AssumeDefaultVersionWhenUnspecified = true;
+    options.ApiVersionReader = ApiVersionReader.Combine(
+        new QueryStringApiVersionReader("version"),
+        new HeaderApiVersionReader("X-Version")
+    );
+})
+.AddApiExplorer(setup =>
+{
+    setup.GroupNameFormat = "'v'VVV";
+    setup.SubstituteApiVersionInUrl = true;
+});
 
 // Configure Entity Framework
 builder.Services.AddDbContext<GamingCafeContext>(options =>
@@ -73,6 +78,12 @@ catch (Exception ex)
     var logger = LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<Program>();
     logger.LogWarning(ex, "Redis setup failed. Application will run without Redis cache.");
 }
+
+// Bind rate limiting options from config
+builder.Services.Configure<RateLimitingOptions>(builder.Configuration.GetSection("RateLimiting"));
+var rlOptions = new RateLimitingOptions();
+builder.Configuration.GetSection("RateLimiting").Bind(rlOptions);
+builder.Services.AddSingleton(rlOptions);
 
 // Configure Hangfire for background jobs - Comment out until Hangfire packages are installed
 // builder.Services.AddHangfire(config => 
@@ -113,9 +124,20 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 // Add Authorization
 builder.Services.AddAuthorization();
 
-// Configure FluentValidation - Comment out until FluentValidation packages are installed
-// builder.Services.AddValidatorsFromAssemblyContaining<Program>();
-// builder.Services.AddFluentValidationAutoValidation();
+// Configure FluentValidation - register validators from this assembly manually
+var fvAssembly = typeof(Program).Assembly;
+var validatorTypes = fvAssembly.GetTypes()
+    .Where(t => !t.IsAbstract && t.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(FluentValidation.IValidator<>)));
+foreach (var vt in validatorTypes)
+{
+    var interfaces = vt.GetInterfaces().Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(FluentValidation.IValidator<>));
+    foreach (var iface in interfaces)
+    {
+        builder.Services.AddScoped(iface, vt);
+    }
+}
+// Note: FluentValidation's automatic MVC integration (AddFluentValidationAutoValidation) is preferred,
+// but registering validators as services allows them to be resolved for manual validation and DI.
 
 // Add SignalR
 builder.Services.AddSignalR();
@@ -148,7 +170,12 @@ builder.Services.AddScoped<ICacheService, CacheService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IStationService, StationService>();
 builder.Services.AddScoped<ITwoFactorService, GamingCafe.Data.Services.TwoFactorService>();
-builder.Services.AddScoped<IAuditService, GamingCafe.Data.Services.AuditService>();
+// Register Data layer audit service first
+builder.Services.AddScoped<GamingCafe.Data.Services.AuditService>();
+// Then register API-level decorator for enrichment
+builder.Services.AddScoped<IAuditService>(sp => new ApiAuditService(
+    sp.GetRequiredService<GamingCafe.Data.Services.AuditService>(),
+    sp.GetRequiredService<IHttpContextAccessor>()));
 builder.Services.AddScoped<IBackupService, BackupService>();
 // Database seeder
 builder.Services.AddScoped<DatabaseSeeder>();
@@ -195,8 +222,16 @@ app.Use(async (context, next) =>
     await next();
 });
 
-// Simple rate limiting middleware
-app.UseMiddleware<GamingCafe.API.Middleware.RateLimitingMiddleware>();
+// Rate limiting: prefer Redis-backed limiter when Redis is configured, otherwise use in-memory limiter
+var redisMultiplexer = app.Services.GetService<StackExchange.Redis.IConnectionMultiplexer>();
+if (redisMultiplexer != null)
+{
+    app.UseMiddleware<GamingCafe.API.Middleware.RedisRateLimitingMiddleware>();
+}
+else
+{
+    app.UseMiddleware<GamingCafe.API.Middleware.RateLimitingMiddleware>();
+}
 
 // Enable CORS
 app.UseCors("LocalhostOnly");

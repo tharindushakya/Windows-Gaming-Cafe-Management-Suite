@@ -36,6 +36,12 @@ public class RateLimitingMiddleware
             return new RateLimitEntry { Count = 0, WindowStart = DateTime.UtcNow };
         });
 
+        // Defensive null-check to satisfy nullable analysis and avoid possible cache-null scenarios
+        if (entry is null)
+        {
+            entry = new RateLimitEntry { Count = 0, WindowStart = DateTime.UtcNow };
+        }
+
         if (entry.Count >= _requestsPerWindow)
         {
             _logger.LogWarning("Rate limit exceeded for IP {IP}", ip);

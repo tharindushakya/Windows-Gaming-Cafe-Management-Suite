@@ -22,7 +22,7 @@ namespace GamingCafe.Data.Migrations
                     UserId = table.Column<int>(type: "integer", nullable: true),
                     EntityType = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     EntityId = table.Column<int>(type: "integer", nullable: true),
-                    Details = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    Details = table.Column<string>(type: "text", nullable: true),
                     Timestamp = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     IpAddress = table.Column<string>(type: "character varying(45)", maxLength: 45, nullable: true),
                     UserAgent = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true)
