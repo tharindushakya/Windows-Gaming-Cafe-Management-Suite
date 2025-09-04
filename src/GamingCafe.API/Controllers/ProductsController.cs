@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using GamingCafe.Core.Models;
+using GamingCafe.Core.Interfaces;
 using GamingCafe.Data.Repositories;
 using System.ComponentModel.DataAnnotations;
 
@@ -516,3 +517,4 @@ public class UpdateStockRequest
     [Range(0, int.MaxValue)]
     public int StockQuantity { get; set; }
 }
+

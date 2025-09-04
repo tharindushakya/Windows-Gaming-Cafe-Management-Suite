@@ -38,6 +38,10 @@ public class User
     public int LoyaltyPoints { get; set; } = 0;
     public DateTime? MembershipExpiryDate { get; set; }
 
+    // Loyalty Program relationship
+    public int? LoyaltyProgramId { get; set; }
+    public virtual LoyaltyProgram? LoyaltyProgram { get; set; }
+
     // Navigation properties
     public virtual ICollection<GameSession> GameSessions { get; set; } = new List<GameSession>();
     public virtual ICollection<Reservation> Reservations { get; set; } = new List<Reservation>();

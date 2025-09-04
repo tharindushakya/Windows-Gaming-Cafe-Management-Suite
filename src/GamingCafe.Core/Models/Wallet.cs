@@ -28,9 +28,19 @@ public class WalletTransaction
 {
     public int WalletTransactionId { get; set; }
 
+    // Legacy property for API compatibility
+    public int TransactionId 
+    { 
+        get => WalletTransactionId; 
+        set => WalletTransactionId = value; 
+    }
+
     public int WalletId { get; set; }
 
     public int UserId { get; set; }
+
+    // Legacy property for API compatibility
+    public int RelatedUserId { get; set; }
 
     public WalletTransactionType Type { get; set; }
 
@@ -51,6 +61,13 @@ public class WalletTransaction
 
     public DateTime TransactionDate { get; set; } = DateTime.UtcNow;
 
+    // Legacy property for API compatibility
+    public DateTime CreatedAt 
+    { 
+        get => TransactionDate; 
+        set => TransactionDate = value; 
+    }
+
     public WalletTransactionStatus Status { get; set; } = WalletTransactionStatus.Completed;
 
     [StringLength(500)]
@@ -58,6 +75,13 @@ public class WalletTransaction
 
     [StringLength(100)]
     public string? ReferenceNumber { get; set; }
+
+    // Legacy property for API compatibility
+    public string? Reference 
+    { 
+        get => ReferenceNumber; 
+        set => ReferenceNumber = value; 
+    }
 
     public int? RelatedTransactionId { get; set; }
 
@@ -74,7 +98,9 @@ public enum WalletTransactionType
     Transfer = 2,
     Purchase = 3,
     Refund = 4,
-    Adjustment = 5
+    Adjustment = 5,
+    Credit = 6,
+    Debit = 7
 }
 
 public enum WalletTransactionStatus

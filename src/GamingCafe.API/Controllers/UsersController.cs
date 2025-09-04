@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using GamingCafe.Data.Repositories;
 using GamingCafe.Core.Models;
+using GamingCafe.Core.Interfaces;
 using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 
@@ -562,3 +563,4 @@ public class PagedResponse<T>
     public int TotalCount { get; set; }
     public int TotalPages { get; set; }
 }
+

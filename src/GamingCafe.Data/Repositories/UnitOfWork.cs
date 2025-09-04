@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
-using GamingCafe.Data.Interfaces;
+using GamingCafe.Core.Interfaces;
 
 namespace GamingCafe.Data.Repositories;
 

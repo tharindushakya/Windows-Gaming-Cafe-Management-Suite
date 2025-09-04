@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using System.Linq.Expressions;
-using GamingCafe.Data.Interfaces;
+using GamingCafe.Core.Interfaces;
 
 namespace GamingCafe.Data.Repositories;
 
@@ -53,6 +53,11 @@ public class Repository<T> : IRepository<T> where T : class
     }
 
     public virtual async Task<T?> FindFirstAsync(Expression<Func<T, bool>> expression)
+    {
+        return await _dbSet.Where(expression).FirstOrDefaultAsync();
+    }
+
+    public virtual async Task<T?> FirstOrDefaultAsync(Expression<Func<T, bool>> expression)
     {
         return await _dbSet.Where(expression).FirstOrDefaultAsync();
     }
@@ -221,5 +226,26 @@ public class Repository<T> : IRepository<T> where T : class
         var equality = Expression.Equal(property, constant);
         
         return Expression.Lambda<Func<T, bool>>(equality, parameter);
+    }
+
+    // Synchronous interface methods that delegate to async implementations
+    async Task IRepository<T>.AddAsync(T entity)
+    {
+        await AddAsync(entity);
+    }
+
+    void IRepository<T>.Update(T entity)
+    {
+        _dbSet.Update(entity);
+    }
+
+    void IRepository<T>.Remove(T entity)
+    {
+        _dbSet.Remove(entity);
+    }
+
+    void IRepository<T>.Delete(T entity)
+    {
+        _dbSet.Remove(entity);
     }
 }

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using GamingCafe.Core.Models;
+using GamingCafe.Core.Interfaces;
 using GamingCafe.Data.Repositories;
 using System.ComponentModel.DataAnnotations;
 
@@ -649,3 +650,4 @@ public class RecordMaintenanceRequest
     [StringLength(500)]
     public string? Notes { get; set; }
 }
+

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using GamingCafe.Core.Models;
+using GamingCafe.Core.Interfaces;
 using GamingCafe.Data.Repositories;
 using System.ComponentModel.DataAnnotations;
 
@@ -159,7 +160,7 @@ public class LoyaltyController : ControllerBase
             {
                 ProgramName = request.ProgramName,
                 Description = request.Description,
-                PointsPerDollar = request.PointsPerDollar,
+                PointsPerDollar = (int)request.PointsPerDollar,
                 RedemptionRate = request.RedemptionRate,
                 MinimumSpend = request.MinimumSpend,
                 BonusThreshold = request.BonusThreshold,
@@ -222,7 +223,7 @@ public class LoyaltyController : ControllerBase
             // Update properties
             program.ProgramName = request.ProgramName;
             program.Description = request.Description;
-            program.PointsPerDollar = request.PointsPerDollar;
+            program.PointsPerDollar = (int)request.PointsPerDollar;
             program.RedemptionRate = request.RedemptionRate;
             program.MinimumSpend = request.MinimumSpend;
             program.BonusThreshold = request.BonusThreshold;
@@ -730,3 +731,4 @@ public class RedeemPointsRequest
     [Range(1, 100000)]
     public int Points { get; set; }
 }
+

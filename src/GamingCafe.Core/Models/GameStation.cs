@@ -37,6 +37,13 @@ public class GameStation
     [StringLength(17)]
     public string MacAddress { get; set; } = string.Empty;
 
+    // Location and maintenance info
+    [StringLength(100)]
+    public string Location { get; set; } = string.Empty;
+    [StringLength(500)]
+    public string Notes { get; set; } = string.Empty;
+    public DateTime? LastMaintenance { get; set; }
+
     // Current session info
     public int? CurrentUserId { get; set; }
     public DateTime? SessionStartTime { get; set; }

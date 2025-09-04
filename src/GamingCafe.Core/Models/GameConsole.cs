@@ -29,7 +29,13 @@ public class GameConsole
 
     public ConsoleStatus Status { get; set; } = ConsoleStatus.Offline;
     public bool IsAvailable { get; set; } = true;
+    public bool IsActive { get; set; } = true;
     public DateTime LastPingAt { get; set; }
+
+    // Purchase and warranty information
+    public DateTime? PurchaseDate { get; set; }
+    public decimal? PurchasePrice { get; set; }
+    public DateTime? WarrantyExpiryDate { get; set; }
 
     // Current session info
     public int? CurrentUserId { get; set; }

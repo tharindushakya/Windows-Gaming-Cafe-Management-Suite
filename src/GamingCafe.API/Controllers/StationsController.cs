@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.SignalR;
 using GamingCafe.API.Services;
 using GamingCafe.API.Hubs;
 using GamingCafe.Core.Models;
+using GamingCafe.Core.Interfaces;
 
 namespace GamingCafe.API.Controllers;
 
@@ -206,3 +207,4 @@ public class StartSessionRequest
     public int UserId { get; set; }
     public decimal HourlyRate { get; set; }
 }
+

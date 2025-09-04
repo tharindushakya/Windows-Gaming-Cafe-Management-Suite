@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using GamingCafe.API.Services;
 using GamingCafe.Core.Models;
+using GamingCafe.Core.Interfaces;
 
 namespace GamingCafe.API.Controllers;
 
@@ -138,3 +139,4 @@ public class AuthUserDto
     public decimal WalletBalance { get; set; }
     public int LoyaltyPoints { get; set; }
 }
+

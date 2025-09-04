@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using GamingCafe.Core.Models;
+using GamingCafe.Core.Interfaces;
 using GamingCafe.Data.Repositories;
 using System.ComponentModel.DataAnnotations;
 
@@ -136,7 +137,7 @@ public class WalletController : ControllerBase
                 BalanceBefore = oldBalance,
                 BalanceAfter = wallet.Balance,
                 PaymentMethod = request.PaymentMethod ?? "Cash",
-                ProcessedBy = GetCurrentUserId(),
+                ProcessedBy = GetCurrentUserId().ToString(),
                 TransactionDate = DateTime.UtcNow,
                 Status = WalletTransactionStatus.Completed
             };
@@ -215,7 +216,7 @@ public class WalletController : ControllerBase
                 BalanceBefore = oldBalance,
                 BalanceAfter = wallet.Balance,
                 PaymentMethod = request.PaymentMethod ?? "Cash",
-                ProcessedBy = GetCurrentUserId(),
+                ProcessedBy = GetCurrentUserId().ToString(),
                 TransactionDate = DateTime.UtcNow,
                 Status = WalletTransactionStatus.Completed
             };
@@ -305,7 +306,7 @@ public class WalletController : ControllerBase
                 Description = $"Transfer to {toUser.Username}: {request.Description}",
                 BalanceBefore = fromOldBalance,
                 BalanceAfter = fromWallet.Balance,
-                ProcessedBy = GetCurrentUserId(),
+                ProcessedBy = GetCurrentUserId().ToString(),
                 TransactionDate = DateTime.UtcNow,
                 Status = WalletTransactionStatus.Completed,
                 RelatedUserId = request.ToUserId
@@ -320,7 +321,7 @@ public class WalletController : ControllerBase
                 Description = $"Transfer from {fromUser.Username}: {request.Description}",
                 BalanceBefore = toOldBalance,
                 BalanceAfter = toWallet.Balance,
-                ProcessedBy = GetCurrentUserId(),
+                ProcessedBy = GetCurrentUserId().ToString(),
                 TransactionDate = DateTime.UtcNow,
                 Status = WalletTransactionStatus.Completed,
                 RelatedUserId = request.FromUserId
@@ -435,7 +436,7 @@ public class WalletController : ControllerBase
                     BalanceBefore = t.BalanceBefore,
                     BalanceAfter = t.BalanceAfter,
                     PaymentMethod = t.PaymentMethod,
-                    ProcessedBy = GetUsernameById(t.ProcessedBy),
+                    ProcessedBy = t.ProcessedBy,
                     TransactionDate = t.TransactionDate,
                     Status = t.Status.ToString()
                 })
@@ -708,21 +709,3 @@ public class GetWalletTransactionsRequest
     public bool SortDescending { get; set; } = true;
 }
 
-// Enums for wallet functionality
-public enum WalletTransactionType
-{
-    Deposit = 0,
-    Withdrawal = 1,
-    Transfer = 2,
-    Purchase = 3,
-    Refund = 4,
-    Adjustment = 5
-}
-
-public enum WalletTransactionStatus
-{
-    Pending = 0,
-    Completed = 1,
-    Failed = 2,
-    Cancelled = 3
-}

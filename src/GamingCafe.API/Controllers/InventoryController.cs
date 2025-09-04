@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using GamingCafe.Core.Models;
+using GamingCafe.Core.Interfaces;
 using GamingCafe.Data.Repositories;
 using System.ComponentModel.DataAnnotations;
 
@@ -92,7 +93,7 @@ public class InventoryController : ControllerBase
                     Reason = m.Reason,
                     MovementDate = m.MovementDate,
                     UserId = m.UserId,
-                    Username = m.User?.Username ?? "System"
+                    Username = m.User != null ? m.User.Username : "System"
                 })
                 .ToList();
 
@@ -536,16 +537,4 @@ public class BulkAdjustInventoryRequest
 
     [StringLength(200)]
     public string? DefaultReason { get; set; }
-}
-
-// Note: MovementType enum should be defined in the models
-public enum MovementType
-{
-    StockIn = 0,
-    StockOut = 1,
-    Adjustment = 2,
-    Sale = 3,
-    Return = 4,
-    Damage = 5,
-    Transfer = 6
 }
