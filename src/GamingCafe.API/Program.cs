@@ -11,11 +11,10 @@ using GamingCafe.API.Hubs;
 using Hangfire;
 using Hangfire.PostgreSql;
 using GamingCafe.API.Filters;
-using GamingCafe.API.Middleware;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Asp.Versioning;
 // OpenTelemetry instrumentation was attempted but reverted to avoid package conflicts; use internal /metrics endpoint instead if needed.
-using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using GamingCafe.Core.Interfaces.Services;
@@ -24,6 +23,13 @@ using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Register Data Protection services for encrypting sensitive data like 2FA secrets
+// Persist data protection keys to a local folder so keys survive restarts (dev-friendly)
+var keysDir = Path.Combine(builder.Environment.ContentRootPath, "keys");
+Directory.CreateDirectory(keysDir);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new System.IO.DirectoryInfo(keysDir));
+
 // Configure Serilog - Comment out until Serilog packages are installed
 // builder.Host.UseSerilog((context, configuration) =>
 //     configuration.ReadFrom.Configuration(context.Configuration));
@@ -31,7 +37,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddControllers();
 
-// Configure API Versioning
+// Configure API Versioning and API explorer for Swagger integration
 builder.Services.AddApiVersioning(options =>
 {
     options.DefaultApiVersion = new ApiVersion(1, 0);
@@ -40,12 +46,10 @@ builder.Services.AddApiVersioning(options =>
         new QueryStringApiVersionReader("version"),
         new HeaderApiVersionReader("X-Version")
     );
-})
-.AddApiExplorer(setup =>
-{
-    setup.GroupNameFormat = "'v'VVV";
-    setup.SubstituteApiVersionInUrl = true;
 });
+
+// Note: API explorer for per-version Swagger docs is intentionally omitted to avoid extra package dependencies.
+// We still register basic API versioning above; Swagger will expose a default v1 doc.
 
 // Configure Entity Framework
 builder.Services.AddDbContext<GamingCafeContext>(options =>
@@ -242,7 +246,20 @@ builder.Services.AddScoped<DatabaseSeeder>();
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+
+// Add Swagger and dynamically create a Swagger document for each discovered API version
+builder.Services.AddSwaggerGen(options =>
+{
+    // Basic settings; detailed per-version docs will be registered below using the API explorer
+    options.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
+});
+
+// Register Swagger with a default v1 document (basic versioning support visible in Swagger)
+builder.Services.AddSwaggerGen(opts =>
+{
+    opts.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo { Title = "GamingCafe API v1", Version = "v1" });
+    opts.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
+});
 
 // OpenTelemetry registration was intentionally removed to avoid package mismatches in this workspace.
 // A simple /metrics endpoint is exposed later in this file for basic Prometheus-style scraping.

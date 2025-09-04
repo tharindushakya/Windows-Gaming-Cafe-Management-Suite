@@ -9,6 +9,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using BCrypt.Net;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace GamingCafe.API.Services;
 
@@ -34,12 +35,14 @@ public class AuthService : IAuthService
     private readonly GamingCafeContext _context;
     private readonly IConfiguration _configuration;
     private readonly IServiceProvider _serviceProvider;
+    private readonly Microsoft.Extensions.Caching.Memory.IMemoryCache _cache;
 
-    public AuthService(GamingCafeContext context, IConfiguration configuration, IServiceProvider serviceProvider)
+    public AuthService(GamingCafeContext context, IConfiguration configuration, IServiceProvider serviceProvider, Microsoft.Extensions.Caching.Memory.IMemoryCache cache)
     {
         _context = context;
         _configuration = configuration;
         _serviceProvider = serviceProvider;
+        _cache = cache;
     }
 
     public async Task<LoginResponse?> AuthenticateAsync(LoginRequest request)
@@ -57,10 +60,14 @@ public class AuthService : IAuthService
             if (string.IsNullOrEmpty(request.TwoFactorCode) && string.IsNullOrEmpty(request.RecoveryCode))
             {
                 var twoFactorToken = GenerateSecureToken();
-                // Store the 2FA token temporarily (you might want to use cache or database for this)
-                user.EmailVerificationToken = twoFactorToken; // Reusing this field for simplicity
-                user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddMinutes(5); // 5 minutes to complete 2FA
-                await _context.SaveChangesAsync();
+                // Store the 2FA token in an in-memory cache with a short TTL
+                // Fallback to CreateEntry to avoid extension method resolution issues
+                var cacheKey = $"2fa:{twoFactorToken}";
+                using (var entry = _cache.CreateEntry(cacheKey))
+                {
+                    entry.Value = user.UserId;
+                    entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
+                }
 
                 return new LoginResponse
                 {
@@ -81,6 +88,14 @@ public class AuthService : IAuthService
                 };
             }
 
+            // When a code is provided, require a valid transient two-factor token as proof this flow was initiated
+            object? cachedObj;
+            if (string.IsNullOrEmpty(request.TwoFactorToken) || !_cache.TryGetValue($"2fa:{request.TwoFactorToken}", out cachedObj) || !(cachedObj is int cachedUserId) || cachedUserId != user.UserId)
+            {
+                // Token missing/expired or mismatch
+                return null;
+            }
+
             // Verify 2FA code or recovery code
             bool isValidTwoFactor = false;
             if (!string.IsNullOrEmpty(request.TwoFactorCode))
@@ -96,6 +111,9 @@ public class AuthService : IAuthService
 
             if (!isValidTwoFactor)
                 return null;
+
+            // Remove transient token after successful verification
+            _cache.Remove($"2fa:{request.TwoFactorToken}");
         }
 
         var accessToken = GenerateJwtToken(user);

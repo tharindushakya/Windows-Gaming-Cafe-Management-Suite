@@ -62,6 +62,10 @@ public class User
     public virtual ICollection<GameSession> GameSessions { get; set; } = new List<GameSession>();
     public virtual ICollection<Reservation> Reservations { get; set; } = new List<Reservation>();
     public virtual ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();
+
+    // Concurrency token for optimistic concurrency control when updating security-sensitive fields
+    [Timestamp]
+    public byte[]? RowVersion { get; set; }
 }
 
 public enum UserRole

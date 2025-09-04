@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using GamingCafe.Core.Interfaces.Services;
 using GamingCafe.Core.DTOs;
 using System.Security.Cryptography;
+using Microsoft.AspNetCore.DataProtection;
 
 namespace GamingCafe.Data.Services;
 
@@ -17,12 +18,11 @@ public class TwoFactorService : ITwoFactorService
     private readonly ILogger<TwoFactorService> _logger;
     private readonly Microsoft.AspNetCore.DataProtection.IDataProtector _protector;
 
-    public TwoFactorService(GamingCafeContext context, ILogger<TwoFactorService> logger)
+    public TwoFactorService(GamingCafeContext context, ILogger<TwoFactorService> logger, IDataProtectionProvider provider)
     {
         _context = context;
         _logger = logger;
-        // Use an application-wide data protector for encrypting 2FA secrets at rest
-        var provider = Microsoft.AspNetCore.DataProtection.DataProtectionProvider.Create("GamingCafe.TwoFactor");
+        // Use injected data protection provider to create a protector for 2FA secrets
         _protector = provider.CreateProtector("TwoFactorSecrets.v1");
     }
 
@@ -53,9 +53,11 @@ public class TwoFactorService : ITwoFactorService
 
             // Store the secret key and recovery codes in the user record
             // Note: In production, these should be encrypted
-            // Protect the secret and recovery codes before storing in DB
+            // Protect the secret before storing in DB
             user.TwoFactorSecretKey = _protector.Protect(secretKey);
-            user.TwoFactorRecoveryCode = _protector.Protect(string.Join(",", recoveryCodes));
+            // Hash recovery codes (PBKDF2 with per-code salt) and store serialized list
+            var hashedRecovery = GenerateHashedRecoveryCodes(recoveryCodes);
+            user.TwoFactorRecoveryCode = string.Join(",", hashedRecovery);
             user.IsTwoFactorEnabled = false; // User needs to verify setup first
 
             // Mark that a setup is pending by setting a short-lived token
@@ -137,34 +139,51 @@ public class TwoFactorService : ITwoFactorService
     /// </summary>
     public async Task<bool> VerifyRecoveryCodeAsync(int userId, string recoveryCode)
     {
-        try
+        const int maxRetries = 3;
+        for (int attempt = 0; attempt < maxRetries; attempt++)
         {
-            var user = await _context.Users.FindAsync(userId);
-            if (user == null || string.IsNullOrEmpty(user.TwoFactorRecoveryCode))
+            try
             {
+                var user = await _context.Users.FindAsync(userId);
+                if (user == null || string.IsNullOrEmpty(user.TwoFactorRecoveryCode))
+                {
+                    return false;
+                }
+
+                // Stored recovery codes are hashed; verify entered code against stored hashes
+                var storedList = user.TwoFactorRecoveryCode.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+                if (ValidateHashedBackupCodeAndConsume(storedList, recoveryCode, out var updatedList))
+                {
+                    // Remove the used recovery code
+                    user.TwoFactorRecoveryCode = string.Join(",", updatedList);
+                    await _context.SaveChangesAsync();
+                    return true;
+                }
+
                 return false;
             }
-            // Unprotect recovery codes
-            var recoveryCodesRaw = _protector.Unprotect(user.TwoFactorRecoveryCode);
-            var recoveryCodes = recoveryCodesRaw.Split(',').ToList();
-            
-            if (ValidateBackupCode(recoveryCodes, recoveryCode))
+            catch (DbUpdateConcurrencyException ex)
             {
-                // Remove the used recovery code
-                recoveryCodes.RemoveAll(c => c.Replace("-", "").Replace(" ", "").ToUpperInvariant() == 
-                                           recoveryCode.Replace("-", "").Replace(" ", "").ToUpperInvariant());
-                user.TwoFactorRecoveryCode = string.Join(",", recoveryCodes);
-                await _context.SaveChangesAsync();
-                return true;
+                _logger.LogWarning(ex, "Concurrency conflict when verifying recovery code for user {UserId}, attempt {Attempt}", userId, attempt + 1);
+                // On concurrency conflict, retry after reloading the entry
+                foreach (var entry in ex.Entries)
+                {
+                    if (entry.Entity is GamingCafe.Core.Models.User)
+                    {
+                        await entry.ReloadAsync();
+                    }
+                }
+                // retry
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error verifying recovery code for user {UserId}", userId);
+                return false;
+            }
+        }
 
-            return false;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error verifying recovery code for user {UserId}", userId);
-            return false;
-        }
+        _logger.LogWarning("Max retry attempts reached when verifying recovery code for user {UserId}", userId);
+        return false;
     }
 
     /// <summary>
@@ -210,10 +229,33 @@ public class TwoFactorService : ITwoFactorService
                 throw new ArgumentException("User not found");
             }
 
-            var newRecoveryCodes = GenerateBackupCodes();
-            user.TwoFactorRecoveryCode = _protector.Protect(string.Join(",", newRecoveryCodes));
 
-            await _context.SaveChangesAsync();
+            var newRecoveryCodes = GenerateBackupCodes();
+            // Store hashed recovery codes (PBKDF2 per-code salt) so they are one-way and consumable
+            var hashed = GenerateHashedRecoveryCodes(newRecoveryCodes);
+
+            const int maxRetries = 3;
+            for (int attempt = 0; attempt < maxRetries; attempt++)
+            {
+                try
+                {
+                    user.TwoFactorRecoveryCode = string.Join(",", hashed);
+                    await _context.SaveChangesAsync();
+                    break;
+                }
+                catch (DbUpdateConcurrencyException ex)
+                {
+                    _logger.LogWarning(ex, "Concurrency conflict when generating new recovery codes for user {UserId}, attempt {Attempt}", userId, attempt + 1);
+                    // reload and retry
+                    foreach (var entry in ex.Entries)
+                    {
+                        if (entry.Entity is GamingCafe.Core.Models.User)
+                        {
+                            await entry.ReloadAsync();
+                        }
+                    }
+                }
+            }
 
             return new TwoFactorRecoveryCodesResponse
             {
@@ -291,19 +333,30 @@ public class TwoFactorService : ITwoFactorService
     private List<string> GenerateBackupCodes(int count = 10)
     {
         var codes = new List<string>();
-        var random = new Random();
-        
+        // Use cryptographic RNG to generate recovery codes
+        const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        var charArray = chars.ToCharArray();
+        var charCount = charArray.Length;
+
         for (int i = 0; i < count; i++)
         {
-            // Generate 8-character alphanumeric codes
-            const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-            var code = new string(Enumerable.Repeat(chars, 8)
-                .Select(s => s[random.Next(s.Length)]).ToArray());
-            
+            var buffer = new byte[8]; // 8 chars
+            using var rng = RandomNumberGenerator.Create();
+            rng.GetBytes(buffer);
+
+            var codeChars = new char[8];
+            for (int j = 0; j < 8; j++)
+            {
+                // Use the random byte to index into the character set
+                var idx = buffer[j] % charCount;
+                codeChars[j] = charArray[idx];
+            }
+
+            var code = new string(codeChars);
             // Format as XXXX-XXXX for readability
             codes.Add($"{code.Substring(0, 4)}-{code.Substring(4, 4)}");
         }
-        
+
         return codes;
     }
 
@@ -320,6 +373,52 @@ public class TwoFactorService : ITwoFactorService
             }
         }
         
+        return false;
+    }
+
+    // Hash recovery codes using PBKDF2 with per-code salt. Each entry format: salt:hash (both base64)
+    private List<string> GenerateHashedRecoveryCodes(List<string> codes)
+    {
+        var list = new List<string>();
+        foreach (var code in codes)
+        {
+            var salt = new byte[16];
+            using var rng = RandomNumberGenerator.Create();
+            rng.GetBytes(salt);
+            var normalized = code?.Replace("-", "").Replace(" ", "").ToUpperInvariant() ?? string.Empty;
+            var hash = Pbkdf2Hash(normalized, salt);
+            list.Add(Convert.ToBase64String(salt) + ":" + Convert.ToBase64String(hash));
+        }
+        return list;
+    }
+
+    private byte[] Pbkdf2Hash(string input, byte[] salt, int iterations = 100_000, int length = 32)
+    {
+        using var derive = new Rfc2898DeriveBytes(input, salt, iterations, HashAlgorithmName.SHA256);
+        return derive.GetBytes(length);
+    }
+
+    // Verifies entered code against stored hashed list. If match, consumes it and returns updated list.
+    private bool ValidateHashedBackupCodeAndConsume(List<string> storedList, string enteredCode, out List<string> updated)
+    {
+        updated = new List<string>(storedList);
+        var normalized = enteredCode?.Replace("-", "").Replace(" ", "").ToUpperInvariant() ?? string.Empty;
+
+        for (int i = 0; i < storedList.Count; i++)
+        {
+            var parts = storedList[i].Split(':');
+            if (parts.Length != 2) continue;
+            var salt = Convert.FromBase64String(parts[0]);
+            var storedHash = Convert.FromBase64String(parts[1]);
+            var candidateHash = Pbkdf2Hash(normalized, salt);
+            if (CryptographicOperations.FixedTimeEquals(candidateHash, storedHash))
+            {
+                // consume
+                updated.RemoveAt(i);
+                return true;
+            }
+        }
+
         return false;
     }
 
