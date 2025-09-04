@@ -6,15 +6,18 @@ using System.Text;
 using GamingCafe.Data;
 using GamingCafe.API.Services;
 using GamingCafe.API.Hubs;
+using GamingCafe.API.Middleware;
 using Npgsql.EntityFrameworkCore.PostgreSQL;
+using Serilog;
+using Hangfire;
+using Hangfire.PostgreSql;
+using Hangfire.InMemory;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure built-in logging for now
-builder.Logging.ClearProviders();
-builder.Logging.AddConsole();
-builder.Logging.AddDebug();
-builder.Logging.SetMinimumLevel(LogLevel.Information);
+// Configure Serilog
+builder.Host.UseSerilog((context, configuration) =>
+    configuration.ReadFrom.Configuration(context.Configuration));
 
 // Add services to the container.
 builder.Services.AddControllers();
@@ -23,12 +26,20 @@ builder.Services.AddControllers();
 builder.Services.AddDbContext<GamingCafeContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Configure Health Checks
-builder.Services.AddHealthChecks();
+// Configure Redis Cache
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = builder.Configuration.GetConnectionString("Redis");
+    options.InstanceName = "GamingCafe";
+});
 
-// Configure Entity Framework
-builder.Services.AddDbContext<GamingCafeContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+// Configure Hangfire for background jobs
+builder.Services.AddHangfire(config => 
+    config.UseInMemoryStorage());
+builder.Services.AddHangfireServer();
+
+// Configure Health Checks (Enhanced monitoring - basic for now)
+builder.Services.AddHealthChecks();
 
 // Configure JWT Authentication
 var jwtKey = builder.Configuration["Jwt:Key"];
@@ -87,11 +98,17 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// TODO: Add global exception handling middleware once namespace issues are resolved
-// app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
+// Add global exception handling middleware
+app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 
 // Enable CORS
 app.UseCors("LocalhostOnly");
+
+// Add Hangfire Dashboard (Development only)
+if (app.Environment.IsDevelopment())
+{
+    app.UseHangfireDashboard("/hangfire");
+}
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -125,11 +142,10 @@ using (var scope = app.Services.CreateScope())
         
         try
         {
-            // TODO: Enable DatabaseSeeder once namespace resolution is fixed
-            // var seeder = new DatabaseSeeder(context, 
-            //     scope.ServiceProvider.GetRequiredService<ILogger<DatabaseSeeder>>());
-            // await seeder.SeedAsync();
-            logger.LogInformation("Database migration and setup completed successfully");
+            var seeder = new DatabaseSeeder(context, 
+                scope.ServiceProvider.GetRequiredService<ILogger<DatabaseSeeder>>());
+            await seeder.SeedAsync();
+            logger.LogInformation("Database migration and seeding completed successfully");
         }
         catch (Exception ex)
         {

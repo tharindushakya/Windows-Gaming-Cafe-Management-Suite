@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using GamingCafe.Core.Models;
 using BCrypt.Net;
 
-namespace GamingCafe.Data.Services;
+namespace GamingCafe.Data;
 
 public class DatabaseSeeder
 {
