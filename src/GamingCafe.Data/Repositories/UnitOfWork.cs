@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using GamingCafe.Data.Interfaces;
-using GamingCafe.Core.Models.Common;
 
 namespace GamingCafe.Data.Repositories;
 
@@ -107,17 +106,6 @@ public class UnitOfWork : IUnitOfWork
     public async Task<int> BulkInsertAsync<T>(IEnumerable<T> entities) where T : class
     {
         var entityList = entities.ToList();
-        
-        // Set audit properties if entities implement IAuditable
-        if (_auditTrailEnabled && !string.IsNullOrEmpty(_currentUserId))
-        {
-            foreach (var entity in entityList.OfType<IAuditable>())
-            {
-                entity.CreatedAt = DateTime.UtcNow;
-                entity.CreatedBy = _currentUserId;
-            }
-        }
-
         await _context.Set<T>().AddRangeAsync(entityList);
         return await _context.SaveChangesAsync();
     }
@@ -125,17 +113,6 @@ public class UnitOfWork : IUnitOfWork
     public async Task<int> BulkUpdateAsync<T>(IEnumerable<T> entities) where T : class
     {
         var entityList = entities.ToList();
-        
-        // Set audit properties if entities implement IAuditable
-        if (_auditTrailEnabled && !string.IsNullOrEmpty(_currentUserId))
-        {
-            foreach (var entity in entityList.OfType<IAuditable>())
-            {
-                entity.UpdatedAt = DateTime.UtcNow;
-                entity.UpdatedBy = _currentUserId;
-            }
-        }
-
         _context.Set<T>().UpdateRange(entityList);
         return await _context.SaveChangesAsync();
     }
@@ -143,27 +120,7 @@ public class UnitOfWork : IUnitOfWork
     public async Task<int> BulkDeleteAsync<T>(IEnumerable<T> entities) where T : class
     {
         var entityList = entities.ToList();
-        
-        // Check if entities support soft delete
-        if (typeof(ISoftDelete).IsAssignableFrom(typeof(T)))
-        {
-            foreach (var entity in entityList.OfType<ISoftDelete>())
-            {
-                entity.IsDeleted = true;
-                entity.DeletedAt = DateTime.UtcNow;
-                if (_auditTrailEnabled && !string.IsNullOrEmpty(_currentUserId))
-                {
-                    entity.DeletedBy = _currentUserId;
-                }
-            }
-            
-            _context.Set<T>().UpdateRange(entityList);
-        }
-        else
-        {
-            _context.Set<T>().RemoveRange(entityList);
-        }
-        
+        _context.Set<T>().RemoveRange(entityList);
         return await _context.SaveChangesAsync();
     }
 
@@ -197,39 +154,39 @@ public class UnitOfWork : IUnitOfWork
     private void ApplyAuditTrail()
     {
         var entries = _context.ChangeTracker.Entries()
-            .Where(e => e.Entity is IAuditable && 
-                       (e.State == EntityState.Added || e.State == EntityState.Modified));
+            .Where(e => e.State == EntityState.Added || e.State == EntityState.Modified);
 
         foreach (var entry in entries)
         {
-            var auditable = (IAuditable)entry.Entity;
-            
-            switch (entry.State)
+            if (entry.State == EntityState.Added)
             {
-                case EntityState.Added:
-                    auditable.CreatedAt = DateTime.UtcNow;
-                    auditable.CreatedBy = _currentUserId;
-                    break;
-                
-                case EntityState.Modified:
-                    auditable.UpdatedAt = DateTime.UtcNow;
-                    auditable.UpdatedBy = _currentUserId;
-                    break;
+                // Try to set creation date if the entity has such a property
+                var createdAtProperty = entry.Properties.FirstOrDefault(p => p.Metadata.Name == "CreatedAt");
+                if (createdAtProperty != null)
+                {
+                    createdAtProperty.CurrentValue = DateTime.UtcNow;
+                }
+
+                var createdByProperty = entry.Properties.FirstOrDefault(p => p.Metadata.Name == "CreatedBy");
+                if (createdByProperty != null && !string.IsNullOrEmpty(_currentUserId))
+                {
+                    createdByProperty.CurrentValue = _currentUserId;
+                }
             }
-        }
-
-        // Handle soft delete entities
-        var softDeleteEntries = _context.ChangeTracker.Entries()
-            .Where(e => e.Entity is ISoftDelete && e.State == EntityState.Modified);
-
-        foreach (var entry in softDeleteEntries)
-        {
-            var softDelete = (ISoftDelete)entry.Entity;
-            
-            if (softDelete.IsDeleted && softDelete.DeletedAt == null)
+            else if (entry.State == EntityState.Modified)
             {
-                softDelete.DeletedAt = DateTime.UtcNow;
-                softDelete.DeletedBy = _currentUserId;
+                // Try to set updated date if the entity has such a property
+                var updatedAtProperty = entry.Properties.FirstOrDefault(p => p.Metadata.Name == "UpdatedAt");
+                if (updatedAtProperty != null)
+                {
+                    updatedAtProperty.CurrentValue = DateTime.UtcNow;
+                }
+
+                var updatedByProperty = entry.Properties.FirstOrDefault(p => p.Metadata.Name == "UpdatedBy");
+                if (updatedByProperty != null && !string.IsNullOrEmpty(_currentUserId))
+                {
+                    updatedByProperty.CurrentValue = _currentUserId;
+                }
             }
         }
     }

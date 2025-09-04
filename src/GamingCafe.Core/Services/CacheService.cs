@@ -9,14 +9,14 @@ namespace GamingCafe.Core.Services;
 public class CacheService : ICacheService
 {
     private readonly IDistributedCache _distributedCache;
-    private readonly IConnectionMultiplexer _redis;
+    private readonly IConnectionMultiplexer? _redis;
     private readonly ILogger<CacheService> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
 
     public CacheService(
         IDistributedCache distributedCache, 
-        IConnectionMultiplexer redis, 
-        ILogger<CacheService> logger)
+        ILogger<CacheService> logger,
+        IConnectionMultiplexer? redis = null)
     {
         _distributedCache = distributedCache;
         _redis = redis;
@@ -28,87 +28,40 @@ public class CacheService : ICacheService
         };
     }
 
-    public async Task<T?> GetAsync<T>(string key)
+    public async Task<T?> GetAsync<T>(string key) where T : class
     {
         try
         {
-            var value = await _distributedCache.GetStringAsync(key);
-            
-            if (string.IsNullOrEmpty(value))
-                return default;
+            var cachedValue = await _distributedCache.GetStringAsync(key);
+            if (string.IsNullOrEmpty(cachedValue))
+                return null;
 
-            return JsonSerializer.Deserialize<T>(value, _jsonOptions);
+            return JsonSerializer.Deserialize<T>(cachedValue, _jsonOptions);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting cached value for key: {Key}", key);
-            return default;
-        }
-    }
-
-    public async Task<string?> GetStringAsync(string key)
-    {
-        try
-        {
-            return await _distributedCache.GetStringAsync(key);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting cached string value for key: {Key}", key);
+            _logger.LogError(ex, "Error retrieving cache key: {Key}", key);
             return null;
         }
     }
 
-    public async Task SetAsync<T>(string key, T value, TimeSpan? expiration = null)
+    public async Task SetAsync<T>(string key, T value, TimeSpan? expiry = null) where T : class
     {
         try
         {
             var serializedValue = JsonSerializer.Serialize(value, _jsonOptions);
-            
             var options = new DistributedCacheEntryOptions();
-            if (expiration.HasValue)
-            {
-                options.SetAbsoluteExpiration(expiration.Value);
-            }
+            
+            if (expiry.HasValue)
+                options.SetAbsoluteExpiration(expiry.Value);
             else
-            {
-                // Default expiration of 1 hour
-                options.SetAbsoluteExpiration(TimeSpan.FromHours(1));
-            }
+                options.SetAbsoluteExpiration(TimeSpan.FromMinutes(30)); // Default 30 minutes
 
             await _distributedCache.SetStringAsync(key, serializedValue, options);
-            
-            _logger.LogDebug("Cached value for key: {Key} with expiration: {Expiration}", 
-                key, expiration ?? TimeSpan.FromHours(1));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error setting cached value for key: {Key}", key);
-        }
-    }
-
-    public async Task SetStringAsync(string key, string value, TimeSpan? expiration = null)
-    {
-        try
-        {
-            var options = new DistributedCacheEntryOptions();
-            if (expiration.HasValue)
-            {
-                options.SetAbsoluteExpiration(expiration.Value);
-            }
-            else
-            {
-                options.SetAbsoluteExpiration(TimeSpan.FromHours(1));
-            }
-
-            await _distributedCache.SetStringAsync(key, value, options);
-            
-            _logger.LogDebug("Cached string value for key: {Key} with expiration: {Expiration}", 
-                key, expiration ?? TimeSpan.FromHours(1));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error setting cached string value for key: {Key}", key);
+            _logger.LogError(ex, "Error setting cache key: {Key}", key);
         }
     }
 
@@ -117,11 +70,10 @@ public class CacheService : ICacheService
         try
         {
             await _distributedCache.RemoveAsync(key);
-            _logger.LogDebug("Removed cached value for key: {Key}", key);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error removing cached value for key: {Key}", key);
+            _logger.LogError(ex, "Error removing cache key: {Key}", key);
         }
     }
 
@@ -129,21 +81,25 @@ public class CacheService : ICacheService
     {
         try
         {
-            var database = _redis.GetDatabase();
-            var server = _redis.GetServer(_redis.GetEndPoints().First());
-            
-            var keys = server.Keys(pattern: pattern);
-            
-            if (keys.Any())
+            if (_redis != null)
             {
-                await database.KeyDeleteAsync(keys.ToArray());
-                _logger.LogDebug("Removed {Count} cached values matching pattern: {Pattern}", 
-                    keys.Count(), pattern);
+                var database = _redis.GetDatabase();
+                var server = _redis.GetServer(_redis.GetEndPoints().First());
+                var keys = server.Keys(pattern: pattern);
+                
+                foreach (var key in keys)
+                {
+                    await database.KeyDeleteAsync(key);
+                }
+            }
+            else
+            {
+                _logger.LogWarning("Redis connection not available for pattern removal: {Pattern}", pattern);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error removing cached values by pattern: {Pattern}", pattern);
+            _logger.LogError(ex, "Error removing cache keys by pattern: {Pattern}", pattern);
         }
     }
 
@@ -156,37 +112,8 @@ public class CacheService : ICacheService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error checking if cached value exists for key: {Key}", key);
+            _logger.LogError(ex, "Error checking cache key existence: {Key}", key);
             return false;
-        }
-    }
-
-    public async Task<T> GetOrSetAsync<T>(string key, Func<Task<T>> factory, TimeSpan? expiration = null)
-    {
-        try
-        {
-            // Try to get from cache first
-            var cachedValue = await GetAsync<T>(key);
-            if (cachedValue != null)
-            {
-                _logger.LogDebug("Cache hit for key: {Key}", key);
-                return cachedValue;
-            }
-
-            // Not in cache, get from factory
-            _logger.LogDebug("Cache miss for key: {Key}, executing factory", key);
-            var value = await factory();
-            
-            // Cache the result
-            await SetAsync(key, value, expiration);
-            
-            return value;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error in GetOrSetAsync for key: {Key}", key);
-            // Fallback to factory if cache fails
-            return await factory();
         }
     }
 
@@ -194,154 +121,39 @@ public class CacheService : ICacheService
     {
         try
         {
-            var server = _redis.GetServer(_redis.GetEndPoints().First());
-            await server.FlushDatabaseAsync();
-            
-            _logger.LogInformation("Cleared all cached values");
+            if (_redis != null)
+            {
+                var server = _redis.GetServer(_redis.GetEndPoints().First());
+                await server.FlushDatabaseAsync();
+            }
+            else
+            {
+                _logger.LogWarning("Redis connection not available for clearing all cache");
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error clearing all cached values");
+            _logger.LogError(ex, "Error clearing all cache");
         }
     }
 
-    public async Task<IEnumerable<string>> GetKeysAsync(string pattern = "*")
+    public async Task<string> GetCacheHealthStatusAsync()
     {
         try
         {
-            var server = _redis.GetServer(_redis.GetEndPoints().First());
-            var keys = server.Keys(pattern: pattern);
+            var testKey = "health_check_" + Guid.NewGuid();
+            var testValue = "test";
             
-            return keys.Select(k => k.ToString());
+            await SetAsync(testKey, testValue, TimeSpan.FromSeconds(10));
+            var retrieved = await GetAsync<string>(testKey);
+            await RemoveAsync(testKey);
+            
+            return retrieved == testValue ? "Healthy" : "Unhealthy";
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting keys with pattern: {Pattern}", pattern);
-            return Enumerable.Empty<string>();
+            _logger.LogError(ex, "Cache health check failed");
+            return "Unhealthy";
         }
-    }
-
-    // Gaming Cafe specific caching methods
-    public async Task<T?> GetUserCacheAsync<T>(int userId, string cacheType)
-    {
-        var key = $"user:{userId}:{cacheType}";
-        return await GetAsync<T>(key);
-    }
-
-    public async Task SetUserCacheAsync<T>(int userId, string cacheType, T value, TimeSpan? expiration = null)
-    {
-        var key = $"user:{userId}:{cacheType}";
-        await SetAsync(key, value, expiration);
-    }
-
-    public async Task RemoveUserCacheAsync(int userId, string? cacheType = null)
-    {
-        if (string.IsNullOrEmpty(cacheType))
-        {
-            // Remove all cache for user
-            await RemoveByPatternAsync($"user:{userId}:*");
-        }
-        else
-        {
-            // Remove specific cache type for user
-            var key = $"user:{userId}:{cacheType}";
-            await RemoveAsync(key);
-        }
-    }
-
-    public async Task<T?> GetStationCacheAsync<T>(int stationId, string cacheType)
-    {
-        var key = $"station:{stationId}:{cacheType}";
-        return await GetAsync<T>(key);
-    }
-
-    public async Task SetStationCacheAsync<T>(int stationId, string cacheType, T value, TimeSpan? expiration = null)
-    {
-        var key = $"station:{stationId}:{cacheType}";
-        await SetAsync(key, value, expiration);
-    }
-
-    public async Task RemoveStationCacheAsync(int stationId, string? cacheType = null)
-    {
-        if (string.IsNullOrEmpty(cacheType))
-        {
-            await RemoveByPatternAsync($"station:{stationId}:*");
-        }
-        else
-        {
-            var key = $"station:{stationId}:{cacheType}";
-            await RemoveAsync(key);
-        }
-    }
-
-    public async Task<T?> GetSessionCacheAsync<T>(int sessionId, string cacheType)
-    {
-        var key = $"session:{sessionId}:{cacheType}";
-        return await GetAsync<T>(key);
-    }
-
-    public async Task SetSessionCacheAsync<T>(int sessionId, string cacheType, T value, TimeSpan? expiration = null)
-    {
-        var key = $"session:{sessionId}:{cacheType}";
-        await SetAsync(key, value, expiration ?? TimeSpan.FromMinutes(30)); // Sessions are more volatile
-    }
-
-    public async Task RemoveSessionCacheAsync(int sessionId, string? cacheType = null)
-    {
-        if (string.IsNullOrEmpty(cacheType))
-        {
-            await RemoveByPatternAsync($"session:{sessionId}:*");
-        }
-        else
-        {
-            var key = $"session:{sessionId}:{cacheType}";
-            await RemoveAsync(key);
-        }
-    }
-
-    // Statistics and reporting cache
-    public async Task<T?> GetReportCacheAsync<T>(string reportType, DateTime date)
-    {
-        var key = $"report:{reportType}:{date:yyyyMMdd}";
-        return await GetAsync<T>(key);
-    }
-
-    public async Task SetReportCacheAsync<T>(string reportType, DateTime date, T value)
-    {
-        var key = $"report:{reportType}:{date:yyyyMMdd}";
-        // Reports can be cached for longer periods
-        await SetAsync(key, value, TimeSpan.FromHours(6));
-    }
-
-    // Invalidate related caches when entities change
-    public async Task InvalidateUserRelatedCacheAsync(int userId)
-    {
-        await Task.WhenAll(
-            RemoveUserCacheAsync(userId),
-            RemoveByPatternAsync($"*:user:{userId}"),
-            RemoveByPatternAsync("statistics:*"),
-            RemoveByPatternAsync("report:*")
-        );
-    }
-
-    public async Task InvalidateStationRelatedCacheAsync(int stationId)
-    {
-        await Task.WhenAll(
-            RemoveStationCacheAsync(stationId),
-            RemoveByPatternAsync($"*:station:{stationId}"),
-            RemoveByPatternAsync("stations:*"),
-            RemoveByPatternAsync("statistics:*")
-        );
-    }
-
-    public async Task InvalidateSessionRelatedCacheAsync(int sessionId, int userId, int stationId)
-    {
-        await Task.WhenAll(
-            RemoveSessionCacheAsync(sessionId),
-            RemoveUserCacheAsync(userId, "sessions"),
-            RemoveStationCacheAsync(stationId, "sessions"),
-            RemoveByPatternAsync("statistics:*"),
-            RemoveByPatternAsync("report:*")
-        );
     }
 }
