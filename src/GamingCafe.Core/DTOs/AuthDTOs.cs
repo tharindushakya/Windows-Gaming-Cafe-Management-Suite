@@ -6,6 +6,8 @@ public class LoginRequest
     public string Password { get; set; } = string.Empty;
     public string? TwoFactorCode { get; set; }
     public string? RecoveryCode { get; set; }
+    // Token returned by server when 2FA is required to complete login
+    public string? TwoFactorToken { get; set; }
 }
 
 public class LoginResponse

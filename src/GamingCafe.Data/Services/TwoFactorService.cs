@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using GamingCafe.Core.Interfaces.Services;
 using GamingCafe.Core.DTOs;
+using System.Security.Cryptography;
 
 namespace GamingCafe.Data.Services;
 
@@ -14,11 +15,15 @@ public class TwoFactorService : ITwoFactorService
 {
     private readonly GamingCafeContext _context;
     private readonly ILogger<TwoFactorService> _logger;
+    private readonly Microsoft.AspNetCore.DataProtection.IDataProtector _protector;
 
     public TwoFactorService(GamingCafeContext context, ILogger<TwoFactorService> logger)
     {
         _context = context;
         _logger = logger;
+        // Use an application-wide data protector for encrypting 2FA secrets at rest
+        var provider = Microsoft.AspNetCore.DataProtection.DataProtectionProvider.Create("GamingCafe.TwoFactor");
+        _protector = provider.CreateProtector("TwoFactorSecrets.v1");
     }
 
     /// <summary>
@@ -48,9 +53,14 @@ public class TwoFactorService : ITwoFactorService
 
             // Store the secret key and recovery codes in the user record
             // Note: In production, these should be encrypted
-            user.TwoFactorSecretKey = secretKey;
-            user.TwoFactorRecoveryCode = string.Join(",", recoveryCodes);
+            // Protect the secret and recovery codes before storing in DB
+            user.TwoFactorSecretKey = _protector.Protect(secretKey);
+            user.TwoFactorRecoveryCode = _protector.Protect(string.Join(",", recoveryCodes));
             user.IsTwoFactorEnabled = false; // User needs to verify setup first
+
+            // Mark that a setup is pending by setting a short-lived token
+            user.EmailVerificationToken = GenerateSecureToken();
+            user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddMinutes(10);
 
             await _context.SaveChangesAsync();
 
@@ -81,11 +91,43 @@ public class TwoFactorService : ITwoFactorService
                 return false;
             }
 
-            return VerifyCode(user.TwoFactorSecretKey, code);
+            // Unprotect secret before verifying
+            var secret = _protector.Unprotect(user.TwoFactorSecretKey);
+            return VerifyCode(secret, code);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error verifying two-factor code for user {UserId}", userId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Confirm and enable 2FA after initial setup by verifying a code.
+    /// </summary>
+    public async Task<bool> ConfirmSetupAsync(int userId, string code)
+    {
+        try
+        {
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null || string.IsNullOrEmpty(user.TwoFactorSecretKey))
+                return false;
+
+            var secret = _protector.Unprotect(user.TwoFactorSecretKey);
+            var verified = VerifyCode(secret, code);
+            if (!verified)
+                return false;
+
+            user.IsTwoFactorEnabled = true;
+            // Clear setup token
+            user.EmailVerificationToken = null;
+            user.EmailVerificationTokenExpiry = null;
+            await _context.SaveChangesAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error confirming two-factor setup for user {UserId}", userId);
             return false;
         }
     }
@@ -102,8 +144,9 @@ public class TwoFactorService : ITwoFactorService
             {
                 return false;
             }
-
-            var recoveryCodes = user.TwoFactorRecoveryCode.Split(',').ToList();
+            // Unprotect recovery codes
+            var recoveryCodesRaw = _protector.Unprotect(user.TwoFactorRecoveryCode);
+            var recoveryCodes = recoveryCodesRaw.Split(',').ToList();
             
             if (ValidateBackupCode(recoveryCodes, recoveryCode))
             {
@@ -168,7 +211,7 @@ public class TwoFactorService : ITwoFactorService
             }
 
             var newRecoveryCodes = GenerateBackupCodes();
-            user.TwoFactorRecoveryCode = string.Join(",", newRecoveryCodes);
+            user.TwoFactorRecoveryCode = _protector.Protect(string.Join(",", newRecoveryCodes));
 
             await _context.SaveChangesAsync();
 
@@ -281,4 +324,12 @@ public class TwoFactorService : ITwoFactorService
     }
 
     #endregion
+
+    private string GenerateSecureToken()
+    {
+        var randomNumber = new byte[16];
+        using var rng = RandomNumberGenerator.Create();
+        rng.GetBytes(randomNumber);
+        return Convert.ToBase64String(randomNumber).Replace("+", "").Replace("/", "").Replace("=", "");
+    }
 }

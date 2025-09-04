@@ -232,6 +232,32 @@ public class AuthController : ControllerBase
         }
     }
 
+    [HttpPost("confirm-2fa-setup")]
+    [Authorize]
+    public async Task<IActionResult> ConfirmTwoFactorSetup([FromBody] TwoFactorConfirmSetupRequest request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            return Unauthorized();
+
+        try
+        {
+            var twoFactorService = HttpContext.RequestServices.GetRequiredService<ITwoFactorService>();
+            var result = await twoFactorService.ConfirmSetupAsync(userId, request.Code);
+            if (result)
+                return Ok(new { message = "Two-factor setup confirmed and enabled" });
+            else
+                return BadRequest("Invalid code or setup not initiated");
+        }
+        catch (Exception ex)
+        {
+            return BadRequest($"Error confirming 2FA setup: {ex.Message}");
+        }
+    }
+
     [HttpPost("disable-2fa")]
     [Authorize]
     public async Task<IActionResult> DisableTwoFactor([FromBody] TwoFactorDisableRequest request)
@@ -324,4 +350,9 @@ public class RevokeTokenRequest
 public class LogoutRequest
 {
     public string RefreshToken { get; set; } = string.Empty;
+}
+
+public class TwoFactorConfirmSetupRequest
+{
+    public string Code { get; set; } = string.Empty;
 }

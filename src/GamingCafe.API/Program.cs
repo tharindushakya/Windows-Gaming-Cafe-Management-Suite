@@ -9,8 +9,12 @@ using GamingCafe.API.Services;
 using GamingCafe.API.Middleware;
 using GamingCafe.API.Hubs;
 using Hangfire;
+using Hangfire.PostgreSql;
+using GamingCafe.API.Filters;
+using GamingCafe.API.Middleware;
 using Microsoft.AspNetCore.Mvc;
 using Asp.Versioning;
+// OpenTelemetry instrumentation was attempted but reverted to avoid package conflicts; use internal /metrics endpoint instead if needed.
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using FluentValidation;
 using FluentValidation.AspNetCore;
@@ -124,20 +128,29 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 // Add Authorization
 builder.Services.AddAuthorization();
 
-// Configure FluentValidation - register validators from this assembly manually
-var fvAssembly = typeof(Program).Assembly;
-var validatorTypes = fvAssembly.GetTypes()
-    .Where(t => !t.IsAbstract && t.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(FluentValidation.IValidator<>)));
-foreach (var vt in validatorTypes)
+// Configure FluentValidation - use automatic MVC integration and register validators from this assembly
+builder.Services.AddFluentValidationAutoValidation();
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+
+// Standardize invalid model state responses to RFC7807 ProblemDetails with validation details
+builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options =>
 {
-    var interfaces = vt.GetInterfaces().Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(FluentValidation.IValidator<>));
-    foreach (var iface in interfaces)
+    options.InvalidModelStateResponseFactory = context =>
     {
-        builder.Services.AddScoped(iface, vt);
-    }
-}
-// Note: FluentValidation's automatic MVC integration (AddFluentValidationAutoValidation) is preferred,
-// but registering validators as services allows them to be resolved for manual validation and DI.
+        var problemDetails = new ValidationProblemDetails(context.ModelState)
+        {
+            Type = "https://tools.ietf.org/html/rfc7807",
+            Title = "One or more validation errors occurred.",
+            Status = StatusCodes.Status400BadRequest,
+            Instance = context.HttpContext.Request.Path
+        };
+
+        return new BadRequestObjectResult(problemDetails)
+        {
+            ContentTypes = { "application/problem+json" }
+        };
+    };
+});
 
 // Add SignalR
 builder.Services.AddSignalR();
@@ -158,8 +171,51 @@ builder.Services.AddCors(options =>
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
 
-// Configure Hangfire (in-memory for dev)
-builder.Services.AddHangfire(config => config.UseInMemoryStorage());
+// Configure Hangfire: prefer PostgreSQL persistent storage when a Hangfire connection string is provided
+var hangfireConnection = builder.Configuration.GetConnectionString("Hangfire") ?? builder.Configuration.GetConnectionString("DefaultConnection");
+var usePostgresHangfire = builder.Configuration.GetValue<bool?>("Hangfire:UsePostgres") ?? true;
+var hangfireSchema = builder.Configuration["Hangfire:Schema"] ?? "public";
+
+if (!string.IsNullOrEmpty(hangfireConnection) && usePostgresHangfire)
+{
+    // Check that the Hangfire tables exist in the target schema before wiring persistent storage.
+    try
+    {
+        using var testConn = new Npgsql.NpgsqlConnection(hangfireConnection);
+        testConn.Open();
+        using var checkCmd = new Npgsql.NpgsqlCommand($"SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = @schema AND table_name = 'server');", testConn);
+        checkCmd.Parameters.AddWithValue("schema", hangfireSchema);
+        var existsObj = checkCmd.ExecuteScalar();
+        var hasTables = existsObj is bool b && b;
+
+        if (hasTables)
+        {
+            builder.Services.AddHangfire(config => config.UsePostgreSqlStorage(hangfireConnection, new Hangfire.PostgreSql.PostgreSqlStorageOptions
+            {
+                SchemaName = hangfireSchema,
+                PrepareSchemaIfNecessary = false
+            }));
+        }
+        else
+        {
+            var logger = LoggerFactory.Create(b => b.AddConsole()).CreateLogger("Program");
+            logger.LogWarning("Hangfire tables not found in schema '{Schema}' — falling back to in-memory Hangfire.", hangfireSchema);
+            builder.Services.AddHangfire(config => config.UseInMemoryStorage());
+        }
+    }
+    catch (Exception ex)
+    {
+        var logger = LoggerFactory.Create(b => b.AddConsole()).CreateLogger("Program");
+        logger.LogWarning(ex, "Error checking Hangfire schema/tables — falling back to in-memory. Error: {Message}", ex.Message);
+        builder.Services.AddHangfire(config => config.UseInMemoryStorage());
+    }
+}
+else
+{
+    // Fallback to in-memory for development/testing
+    builder.Services.AddHangfire(config => config.UseInMemoryStorage());
+}
+
 builder.Services.AddHangfireServer();
 
 // Add custom services - register available implementations
@@ -187,6 +243,9 @@ builder.Services.AddScoped<DatabaseSeeder>();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// OpenTelemetry registration was intentionally removed to avoid package mismatches in this workspace.
+// A simple /metrics endpoint is exposed later in this file for basic Prometheus-style scraping.
 
 var app = builder.Build();
 
@@ -222,30 +281,52 @@ app.Use(async (context, next) =>
     await next();
 });
 
-// Rate limiting: prefer Redis-backed limiter when Redis is configured, otherwise use in-memory limiter
-var redisMultiplexer = app.Services.GetService<StackExchange.Redis.IConnectionMultiplexer>();
-if (redisMultiplexer != null)
+// Rate limiting: use ASP.NET Core built-in rate limiter configured from RateLimiting options (best practice)
+app.UseRateLimiter();
+
+// Increment allowed counter for successful requests (executed after the rate limiter)
+app.Use(async (context, next) =>
 {
-    app.UseMiddleware<GamingCafe.API.Middleware.RedisRateLimitingMiddleware>();
-}
-else
-{
-    app.UseMiddleware<GamingCafe.API.Middleware.RateLimitingMiddleware>();
-}
+    // If the response has already been set to 429 by the rate limiter, do not increment
+    if (context.Response.StatusCode != StatusCodes.Status429TooManyRequests)
+    {
+        RateLimitingMetrics.IncrementAllowed(1);
+    }
+    await next();
+});
 
 // Enable CORS
 app.UseCors("LocalhostOnly");
 
-// Add Hangfire Dashboard (Development only) - Comment out until Hangfire is installed
-// if (app.Environment.IsDevelopment())
-// {
-//     app.UseHangfireDashboard("/hangfire");
-// }
+// Add Hangfire Dashboard (secured)
+var hangfireDashboardPath = builder.Configuration["Hangfire:DashboardPath"] ?? "/hangfire";
+app.UseWhen(ctx => ctx.Request.Path.StartsWithSegments(hangfireDashboardPath), appBuilder =>
+{
+    appBuilder.UseHangfireDashboard(hangfireDashboardPath, new Hangfire.DashboardOptions
+    {
+        Authorization = new[] { new HangfireDashboardAuthFilter() }
+    });
+});
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Simple Prometheus-style /metrics endpoint for rate limiter counters
+app.MapGet("/metrics", () =>
+{
+    var allowed = RateLimitingMetrics.GetAllowed();
+    var rejected = RateLimitingMetrics.GetRejected();
+    var sb = new System.Text.StringBuilder();
+    sb.AppendLine("# HELP gamingcafe_rate_limit_allowed Number of requests allowed by rate limiter");
+    sb.AppendLine("# TYPE gamingcafe_rate_limit_allowed counter");
+    sb.AppendLine($"gamingcafe_rate_limit_allowed {allowed}");
+    sb.AppendLine("# HELP gamingcafe_rate_limit_rejected Number of requests rejected by rate limiter");
+    sb.AppendLine("# TYPE gamingcafe_rate_limit_rejected counter");
+    sb.AppendLine($"gamingcafe_rate_limit_rejected {rejected}");
+    return Results.Text(sb.ToString(), "text/plain; version=0.0.4");
+});
 
 // Map SignalR Hub
 app.MapHub<GameCafeHub>("/gamecafehub");

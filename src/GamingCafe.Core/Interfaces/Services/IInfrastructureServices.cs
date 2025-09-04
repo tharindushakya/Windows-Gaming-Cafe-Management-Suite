@@ -75,6 +75,8 @@ public interface ITwoFactorService
     // Two-Factor Authentication
     Task<TwoFactorSetupResponse> SetupTwoFactorAsync(int userId, string password);
     Task<bool> VerifyTwoFactorAsync(int userId, string code);
+    // Confirm and enable two-factor after initial verification during setup
+    Task<bool> ConfirmSetupAsync(int userId, string code);
     Task<bool> VerifyRecoveryCodeAsync(int userId, string recoveryCode);
     Task<bool> DisableTwoFactorAsync(int userId, string password);
     Task<TwoFactorRecoveryCodesResponse> GenerateNewRecoveryCodesAsync(int userId);
