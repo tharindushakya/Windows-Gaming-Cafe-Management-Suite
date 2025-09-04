@@ -161,16 +161,14 @@ public class AuditService : IAuditService
 
     private string? GetCurrentIpAddress()
     {
-        // This would be injected from HttpContext in a real implementation
-        // For now, return a placeholder
-        return "127.0.0.1"; // TODO: Inject HttpContextAccessor to get real IP
+        // Placeholder implementation; IHttpContextAccessor not available in Data project
+        return "127.0.0.1"; 
     }
-
+    
     private string? GetCurrentUserAgent()
     {
-        // This would be injected from HttpContext in a real implementation
-        // For now, return a placeholder
-        return "System"; // TODO: Inject HttpContextAccessor to get real User-Agent
+        // Placeholder implementation; IHttpContextAccessor not available in Data project
+        return "System";
     }
 }
 

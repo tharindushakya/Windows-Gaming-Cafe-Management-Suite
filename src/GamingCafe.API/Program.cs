@@ -6,7 +6,9 @@ using System.Text;
 using GamingCafe.Data;
 using GamingCafe.Data.Services;
 using GamingCafe.API.Services;
+using GamingCafe.API.Middleware;
 using GamingCafe.API.Hubs;
+using Hangfire;
 using GamingCafe.Core.Interfaces.Services;
 using GamingCafe.Core.Services;
 using StackExchange.Redis;
@@ -77,102 +79,14 @@ catch (Exception ex)
 //     config.UseInMemoryStorage());
 // builder.Services.AddHangfireServer();
 
-// Configure Enhanced Health Checks with Best Practices
+// Configure Enhanced Health Checks by registering dedicated IHealthCheck implementations
 builder.Services.AddHealthChecks()
-    // Basic Database Health Check using EF Core
-    .AddCheck("database", () =>
-    {
-        try
-        {
-            // This is acceptable for health checks as it's a simple connectivity test
-            #pragma warning disable ASP0000
-            using var scope = builder.Services.BuildServiceProvider().CreateScope();
-            #pragma warning restore ASP0000
-            var context = scope.ServiceProvider.GetRequiredService<GamingCafeContext>();
-            return context.Database.CanConnect() ? HealthCheckResult.Healthy("Database is accessible") 
-                                                 : HealthCheckResult.Unhealthy("Database connection failed");
-        }
-        catch (Exception ex)
-        {
-            return HealthCheckResult.Unhealthy("Database health check failed", ex);
-        }
-    }, tags: new[] { "database", "ef-core", "critical" })
-    
-    // Basic Application Health Check
-    .AddCheck("application", () =>
-    {
-        try
-        {
-            var memoryUsed = GC.GetTotalMemory(false);
-            return memoryUsed < 1_000_000_000 // 1GB threshold
-                ? HealthCheckResult.Healthy($"Application healthy, memory usage: {memoryUsed / 1024 / 1024} MB")
-                : HealthCheckResult.Degraded($"High memory usage: {memoryUsed / 1024 / 1024} MB");
-        }
-        catch (Exception ex)
-        {
-            return HealthCheckResult.Unhealthy("Application health check failed", ex);
-        }
-    }, tags: new[] { "application", "system", "critical" })
-    
-    // Email Service Health Check
-    .AddCheck("email", () =>
-    {
-        try
-        {
-            #pragma warning disable ASP0000
-            using var scope = builder.Services.BuildServiceProvider().CreateScope();
-            #pragma warning restore ASP0000
-            var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
-            var healthResult = emailService.TestConnectionAsync().GetAwaiter().GetResult();
-            
-            return healthResult.IsHealthy 
-                ? HealthCheckResult.Healthy($"Email service healthy - Response time: {healthResult.ResponseTime.TotalMilliseconds:F0}ms")
-                : HealthCheckResult.Unhealthy($"Email service unhealthy: {healthResult.ErrorMessage}");
-        }
-        catch (Exception ex)
-        {
-            return HealthCheckResult.Unhealthy("Email health check failed", ex);
-        }
-    }, tags: new[] { "email", "smtp", "external" })
-    
-    // Redis Cache Health Check
-    .AddCheck("redis", () =>
-    {
-        try
-        {
-            #pragma warning disable ASP0000
-            using var scope = builder.Services.BuildServiceProvider().CreateScope();
-            #pragma warning restore ASP0000
-            var redis = scope.ServiceProvider.GetService<IConnectionMultiplexer>();
-            
-            if (redis == null)
-            {
-                return HealthCheckResult.Degraded("Redis not configured - falling back to in-memory cache");
-            }
-            
-            if (!redis.IsConnected)
-            {
-                return HealthCheckResult.Degraded("Redis not connected - falling back to in-memory cache");
-            }
-            
-            var database = redis.GetDatabase();
-            var testKey = "health_check_" + Guid.NewGuid();
-            var testValue = "test";
-            
-            // Test set and get operations
-            database.StringSet(testKey, testValue);
-            var retrievedValue = database.StringGet(testKey);
-            database.KeyDelete(testKey);
-            
-            return retrievedValue == testValue 
-                ? HealthCheckResult.Healthy("Redis is connected and responding")
-                : HealthCheckResult.Degraded("Redis operations failed - falling back to in-memory cache");
-        }
-        catch (Exception ex)
-        {
-            return HealthCheckResult.Degraded($"Redis unavailable - falling back to in-memory cache: {ex.Message}");
-        }
-    }, tags: new[] { "redis", "cache", "optional" });
+    .AddCheck<DatabaseHealthCheck>("database", tags: new[] { "database", "ef-core", "critical" })
+    .AddCheck<ApplicationHealthCheck>("application", tags: new[] { "application", "system", "critical" })
+    .AddCheck<EmailServiceHealthCheck>("email", tags: new[] { "email", "smtp", "external" })
+    .AddCheck<RedisHealthCheck>("redis", tags: new[] { "redis", "cache", "optional" })
+    .AddCheck<BackupServiceHealthCheck>("backup", tags: new[] { "backup", "optional" })
+    .AddCheck<FileUploadServiceHealthCheck>("fileupload", tags: new[] { "fileupload", "optional" });
 
 // Configure JWT Authentication
 var jwtKey = builder.Configuration["Jwt:Key"];
@@ -218,16 +132,26 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Add custom services - Comment out until interfaces and implementations are created
+// Register IHttpContextAccessor and in-memory cache for middleware and services
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddMemoryCache();
+
+// Configure Hangfire (in-memory for dev)
+builder.Services.AddHangfire(config => config.UseInMemoryStorage());
+builder.Services.AddHangfireServer();
+
+// Add custom services - register available implementations
 builder.Services.AddScoped<IEmailService, EmailService>();
-// builder.Services.AddScoped<IFileUploadService, FileUploadService>();
+builder.Services.AddScoped<IFileUploadService, FileUploadService>();
 builder.Services.AddScoped<ICacheService, CacheService>();
 // builder.Services.AddScoped<IValidationService, ValidationService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IStationService, StationService>();
 builder.Services.AddScoped<ITwoFactorService, GamingCafe.Data.Services.TwoFactorService>();
 builder.Services.AddScoped<IAuditService, GamingCafe.Data.Services.AuditService>();
-// builder.Services.AddScoped<IBackupService, BackupService>();
+builder.Services.AddScoped<IBackupService, BackupService>();
+// Database seeder
+builder.Services.AddScoped<DatabaseSeeder>();
 
 // Add deployment and monitoring services - Comment out until implemented
 // builder.Services.AddScoped<IDeploymentValidationService, DeploymentValidationService>();
@@ -252,8 +176,8 @@ else
     app.UseHsts();
 }
 
-// Add global exception handling middleware - Comment out until middleware is created
-// app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
+// Add global exception handling middleware
+app.UseMiddleware<GamingCafe.API.Middleware.GlobalExceptionHandlingMiddleware>();
 
 // Security headers
 app.Use(async (context, next) =>
@@ -270,6 +194,9 @@ app.Use(async (context, next) =>
     
     await next();
 });
+
+// Simple rate limiting middleware
+app.UseMiddleware<GamingCafe.API.Middleware.RateLimitingMiddleware>();
 
 // Enable CORS
 app.UseCors("LocalhostOnly");
@@ -335,19 +262,54 @@ using (var scope = app.Services.CreateScope())
     if (app.Environment.IsDevelopment())
     {
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        
         try
         {
-            // Database seeding - Comment out until DatabaseSeeder is implemented
-            // var seeder = new DatabaseSeeder(context, 
-            //     scope.ServiceProvider.GetRequiredService<ILogger<DatabaseSeeder>>());
-            // await seeder.SeedAsync();
-            logger.LogInformation("Database migration completed successfully");
+            var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
+            await seeder.SeedAsync();
+            logger.LogInformation("Database migration and seeding completed successfully");
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "An error occurred while seeding the database");
         }
+    }
+}
+
+// Run a one-time SMTP configuration validation at startup (non-blocking)
+using (var startupScope = app.Services.CreateScope())
+{
+    try
+    {
+        var logger = startupScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        var emailService = startupScope.ServiceProvider.GetService<GamingCafe.Core.Interfaces.Services.IEmailService>();
+        if (emailService != null)
+        {
+            var health = await emailService.TestConnectionAsync();
+            if (!health.IsHealthy)
+            {
+                logger.LogWarning("SMTP health check failed at startup: {Error}", health.ErrorMessage);
+            }
+            else
+            {
+                logger.LogInformation("SMTP configuration validated at startup. Server: {Host}:{Port}", health.ServerInfo?.Host, health.ServerInfo?.Port);
+            }
+        }
+
+        // Schedule backups with Hangfire if enabled in configuration
+        var config = startupScope.ServiceProvider.GetRequiredService<IConfiguration>();
+        var enableScheduled = bool.TryParse(config["Backup:EnableScheduled"], out var enabled) && enabled;
+        if (enableScheduled)
+        {
+            var cronExpr = config["Backup:Cron"] ?? "0 2 * * *"; // default daily at 2 AM
+            RecurringJob.AddOrUpdate("gamingcafe-scheduled-backup", () => startupScope.ServiceProvider.GetRequiredService<IBackupService>().CreateScheduledBackupAsync(), cronExpr);
+            var logger2 = startupScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+            logger2.LogInformation("Scheduled recurring backup with cron: {Cron}", cronExpr);
+        }
+    }
+    catch (Exception ex)
+    {
+        var logger = startupScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogWarning(ex, "Startup service checks failed");
     }
 }
 
