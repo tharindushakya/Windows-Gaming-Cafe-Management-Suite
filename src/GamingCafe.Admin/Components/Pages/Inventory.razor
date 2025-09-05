@@ -3,10 +3,6 @@
 @using GamingCafe.Data
 @inject GamingCafeContext DbContext
 @inject IJSRuntime JSRuntime
-@inject ILogger<Inventory> Logger
-@inject GamingCafe.Admin.Services.AdminApiService ApiService
-@inject GamingCafe.Admin.Services.AdminNotificationService NotificationService
-@using GamingCafe.Admin.Services
 
 <PageTitle>Inventory Management</PageTitle>
 
@@ -181,37 +177,13 @@
 @code {
     private List<Product>? products;
     private List<Product>? filteredProducts;
-    private string selectedCategory = string.Empty;
+    private string selectedCategory = "";
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        await LoadProductsAsync();
+        LoadProducts();
     }
 
-    private async Task LoadProductsAsync()
-    {
-        try
-        {
-            var apiProducts = await ApiService.GetProductsAsync();
-            if (apiProducts != null)
-            {
-                products = apiProducts.OrderBy(p => p.Name).ToList();
-            }
-            else
-            {
-                products = DbContext.Products.OrderBy(p => p.Name).ToList();
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to load products from API, falling back to database");
-            products = DbContext.Products.OrderBy(p => p.Name).ToList();
-        }
-
-        FilterProducts();
-    }
-
-    // kept for compatibility with other calls
     private void LoadProducts()
     {
         products = DbContext.Products.OrderBy(p => p.Name).ToList();
@@ -220,20 +192,16 @@
 
     private void FilterProducts()
     {
-        if (products == null)
-        {
-            filteredProducts = null;
-            return;
-        }
+        if (products == null) return;
 
-        filteredProducts = string.IsNullOrEmpty(selectedCategory)
-            ? products
+        filteredProducts = string.IsNullOrEmpty(selectedCategory) 
+            ? products 
             : products.Where(p => p.Category == selectedCategory).ToList();
     }
 
     private void FilterByCategory(ChangeEventArgs e)
     {
-        selectedCategory = e.Value?.ToString() ?? string.Empty;
+        selectedCategory = e.Value?.ToString() ?? "";
         FilterProducts();
     }
 
@@ -241,7 +209,7 @@
     {
         if (product.StockQuantity == 0) return "table-danger";
         if (product.StockQuantity <= product.MinStockLevel) return "table-warning";
-        return string.Empty;
+        return "";
     }
 
     private string GetStockBadgeClass(Product product)
@@ -253,96 +221,26 @@
 
     private async Task ShowAddProductModal()
     {
-        Logger.LogDebug("Inventory.ShowAddProductModal clicked");
-
-        var productName = await JSRuntime.InvokeAsync<string>("prompt", "Enter product name:");
-        if (string.IsNullOrWhiteSpace(productName)) return;
-
-        var priceStr = await JSRuntime.InvokeAsync<string>("prompt", "Enter price:");
-        if (!decimal.TryParse(priceStr, out var price)) return;
-
-        var stockStr = await JSRuntime.InvokeAsync<string>("prompt", "Enter stock quantity:");
-        if (!int.TryParse(stockStr, out var stock)) return;
-
-        var newProduct = new Product
-        {
-            Name = productName,
-            Price = price,
-            StockQuantity = stock,
-            Category = "Uncategorized",
-            IsActive = true
-        };
-        Product? created = null;
-        try
-        {
-            created = await ApiService.CreateProductAsync(newProduct);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "API CreateProductAsync failed");
-        }
-        if (created != null)
-        {
-            await NotificationService.AddNotificationAsync("Product Created", $"Product '{created.Name}' created successfully.", GamingCafe.Admin.Services.NotificationType.Success);
-            await LoadProductsAsync();
-            StateHasChanged();
-            return;
-        }
-
-        // fallback local save
-        DbContext.Products.Add(newProduct);
-        await DbContext.SaveChangesAsync();
-        LoadProducts();
-        StateHasChanged();
+        await JSRuntime.InvokeVoidAsync("alert", "Add Product functionality coming soon!");
     }
 
     private async Task EditProduct(Product product)
     {
-        if (product == null)
-        {
-            Logger.LogWarning("EditProduct called with null product");
-            return;
-        }
-
-        Logger.LogDebug("Inventory.EditProduct clicked for {product}", product.Name);
-        var newName = await JSRuntime.InvokeAsync<string>("prompt", $"Edit name for {product.Name}:", product.Name);
-        if (string.IsNullOrEmpty(newName)) return;
-        product.Name = newName;
-
-        var ok = await ApiService.UpdateProductAsync(product);
-        if (!ok)
-        {
-            DbContext.Products.Update(product);
-            await DbContext.SaveChangesAsync();
-        }
-
-        await LoadProductsAsync();
-        StateHasChanged();
+        await JSRuntime.InvokeVoidAsync("alert", $"Edit Product {product.Name} functionality coming soon!");
     }
 
     private async Task AdjustStock(Product product)
     {
-        if (product == null)
-        {
-            Logger.LogWarning("AdjustStock called with null product");
-            return;
-        }
-
-        Logger.LogDebug("Inventory.AdjustStock invoked for {product}", product.Name);
         var adjustment = await JSRuntime.InvokeAsync<string>("prompt", $"Current stock for {product.Name}: {product.StockQuantity}\nEnter adjustment (+/-number):");
-
+        
         if (!string.IsNullOrEmpty(adjustment) && int.TryParse(adjustment, out int adjustmentValue))
         {
             var newStock = product.StockQuantity + adjustmentValue;
             if (newStock >= 0)
             {
                 product.StockQuantity = newStock;
-                var ok = await ApiService.UpdateProductAsync(product);
-                if (!ok)
-                {
-                    await DbContext.SaveChangesAsync();
-                }
-                await LoadProductsAsync();
+                await DbContext.SaveChangesAsync();
+                LoadProducts();
                 StateHasChanged();
             }
             else
@@ -354,24 +252,17 @@
 
     private async Task DeleteProduct(int productId)
     {
-        Logger.LogDebug("Inventory.DeleteProduct invoked for id {id}", productId);
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this product?");
-        if (!confirmed) return;
-
-        var ok = await ApiService.DeleteProductAsync(productId);
-        if (!ok)
+        if (confirmed)
         {
             var product = DbContext.Products.Find(productId);
             if (product != null)
             {
                 DbContext.Products.Remove(product);
                 await DbContext.SaveChangesAsync();
+                LoadProducts();
+                StateHasChanged();
             }
         }
-
-        await LoadProductsAsync();
-        StateHasChanged();
     }
 }
-
-    

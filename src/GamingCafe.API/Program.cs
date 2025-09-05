@@ -7,7 +7,6 @@ using GamingCafe.Data;
 using GamingCafe.Data.Services;
 using GamingCafe.API.Services;
 using GamingCafe.API.Middleware;
-using StackExchange.Redis;
 using GamingCafe.API.Hubs;
 using Hangfire;
 using Hangfire.PostgreSql;
@@ -231,8 +230,6 @@ builder.Services.AddScoped<ICacheService, CacheService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IStationService, StationService>();
 builder.Services.AddScoped<ITwoFactorService, GamingCafe.Data.Services.TwoFactorService>();
-// Register UnitOfWork implementation from Data layer (expose as Core interface used by controllers)
-builder.Services.AddScoped<GamingCafe.Core.Interfaces.IUnitOfWork, GamingCafe.Data.Repositories.UnitOfWork>();
 // Register Data layer audit service first
 builder.Services.AddScoped<GamingCafe.Data.Services.AuditService>();
 // Then register API-level decorator for enrichment
@@ -301,26 +298,13 @@ app.Use(async (context, next) =>
     await next();
 });
 
-// Rate limiting: choose Redis-backed limiter when a healthy ConnectionMultiplexer exists, otherwise use an in-memory middleware
-// Use the project's custom middlewares which provide consistent problem+json responses and metric counters.
-var multiplexer = app.Services.GetService<StackExchange.Redis.IConnectionMultiplexer>();
-var rlOptionsSvc = app.Services.GetService<GamingCafe.API.Middleware.RateLimitingOptions>();
-
-if (multiplexer != null && multiplexer.IsConnected)
-{
-    // Prefer Redis-backed sliding-window limiter in distributed environments
-    app.UseMiddleware<GamingCafe.API.Middleware.RedisRateLimitingMiddleware>();
-}
-else
-{
-    // Fallback to simple in-memory IP-based limiter for single-node/dev
-    app.UseMiddleware<GamingCafe.API.Middleware.RateLimitingMiddleware>();
-}
+// Rate limiting: use ASP.NET Core built-in rate limiter configured from RateLimiting options (best practice)
+app.UseRateLimiter();
 
 // Increment allowed counter for successful requests (executed after the rate limiter)
 app.Use(async (context, next) =>
 {
-    // If the response has already been set to 429 by our rate limiter, do not increment
+    // If the response has already been set to 429 by the rate limiter, do not increment
     if (context.Response.StatusCode != StatusCodes.Status429TooManyRequests)
     {
         RateLimitingMetrics.IncrementAllowed(1);
@@ -463,6 +447,3 @@ using (var startupScope = app.Services.CreateScope())
 }
 
 app.Run();
-
-// Expose Program class for functional/integration tests (WebApplicationFactory)
-public partial class Program { }

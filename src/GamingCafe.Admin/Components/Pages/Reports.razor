@@ -4,7 +4,6 @@
 @using Microsoft.EntityFrameworkCore
 @inject GamingCafeContext DbContext
 @inject IJSRuntime JSRuntime
-@inject ILogger<Reports> Logger
 
 <PageTitle>Reports & Analytics</PageTitle>
 
@@ -282,14 +281,12 @@
 
     private void RefreshData()
     {
-        Logger.LogDebug("Reports.RefreshData clicked");
         LoadReportData();
         StateHasChanged();
     }
 
     private async Task ExportReport()
     {
-        Logger.LogDebug("Reports.ExportReport clicked");
         await JSRuntime.InvokeVoidAsync("alert", "Export functionality coming soon!");
     }
 

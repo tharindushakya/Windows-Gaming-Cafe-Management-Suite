@@ -1,54 +1,6 @@
-﻿@using Microsoft.AspNetCore.Components.Authorization
-
-<CascadingAuthenticationState>
-    <Router AppAssembly="@typeof(App).Assembly">
-        <Found Context="routeData">
-            <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(Layout.MainLayout)">
-                <NotAuthorized>
-                    @if (context.User.Identity?.IsAuthenticated != true)
-                    {
-                        @RedirectToLogin
-                    }
-                    else
-                    {
-                        <div class="alert alert-danger" role="alert">
-                            <h4 class="alert-heading">Access Denied</h4>
-                            <p>You do not have permission to access this resource.</p>
-                        </div>
-                    }
-                </NotAuthorized>
-                <Authorizing>
-                    <div class="d-flex justify-content-center">
-                        <div class="spinner-border" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                    </div>
-                </Authorizing>
-            </AuthorizeRouteView>
-            <FocusOnNavigate RouteData="@routeData" Selector="h1" />
-        </Found>
-        <NotFound>
-            <PageTitle>Not found</PageTitle>
-            <LayoutView Layout="@typeof(Layout.MainLayout)">
-                <div class="alert alert-warning" role="alert">
-                    <h4 class="alert-heading">Page Not Found</h4>
-                    <p>Sorry, there's nothing at this address.</p>
-                    <hr>
-                    <p class="mb-0">
-                        <a href="/" class="btn btn-primary">
-                            <i class="bi bi-house"></i> Go Home
-                        </a>
-                    </p>
-                </div>
-            </LayoutView>
-        </NotFound>
-    </Router>
-</CascadingAuthenticationState>
-
-@code {
-    // Redirect to login (render fragment)
-    private RenderFragment RedirectToLogin =>
-    @<div>
-        <script>window.location.href = '/Account/Login';</script>
-    </div>;
-}
+﻿<Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+</Router>

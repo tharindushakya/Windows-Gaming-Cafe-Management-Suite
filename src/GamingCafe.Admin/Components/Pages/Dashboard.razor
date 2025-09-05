@@ -1,110 +1,74 @@
 @page "/dashboard"
-@using GamingCafe.Admin.Services
-@inject AdminApiService ApiService
-@inject AdminNotificationService NotificationService
-@inject IJSRuntime JSRuntime
-@inject ILogger<Dashboard> Logger
-@inject ILogger<Dashboard> Logger
+@using GamingCafe.Data
+@using GamingCafe.Core.Models
+@using Microsoft.EntityFrameworkCore
+@inject GamingCafeContext DbContext
+@rendermode InteractiveServer
 
-<PageTitle>Admin Dashboard - Gaming Café</PageTitle>
-
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="h3 mb-0">
-        <i class="bi bi-speedometer2 me-2 text-primary"></i>
-        Admin Dashboard
-    </h1>
-    <div class="d-flex gap-2">
-        <button class="btn btn-outline-primary" @onclick="RefreshData">
-            <i class="bi bi-arrow-clockwise me-1"></i>
-            Refresh
-        </button>
-        <button class="btn btn-primary" @onclick="ExportReport">
-            <i class="bi bi-download me-1"></i>
-            Export Report
-        </button>
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="display-4 text-primary mb-4">Gaming Café Dashboard</h1>
+        </div>
     </div>
-</div>
 
-@if (isLoading)
-{
-    <div class="text-center py-5">
-        <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading...</span>
-        </div>
-        <p class="mt-2 text-muted">Loading dashboard data...</p>
-    </div>
-}
-else
-{
-    <!-- Key Metrics Cards -->
-    <div class="row g-3 mb-4">
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100">
+    <!-- Stats Overview -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
                 <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="flex-grow-1">
-                            <h6 class="card-title text-muted mb-1">Active Sessions</h6>
-                            <h3 class="mb-0 text-success">@dashboardData.ActiveSessions</h3>
-                            <small class="text-muted">@dashboardData.TotalUsers total users</small>
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="card-title">@totalStations</h4>
+                            <p class="card-text">Total Stations</p>
                         </div>
-                        <div class="p-3 bg-success bg-opacity-10 rounded-circle">
-                            <i class="bi bi-controller text-success fs-4"></i>
+                        <div class="align-self-center">
+                            <i class="fas fa-desktop fa-2x"></i>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100">
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
                 <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="flex-grow-1">
-                            <h6 class="card-title text-muted mb-1">Available Stations</h6>
-                            <h3 class="mb-0 text-info">@dashboardData.AvailableStations</h3>
-                            <small class="text-muted">@dashboardData.TotalStations total stations</small>
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="card-title">@availableStations</h4>
+                            <p class="card-text">Available</p>
                         </div>
-                        <div class="p-3 bg-info bg-opacity-10 rounded-circle">
-                            <i class="bi bi-pc-display text-info fs-4"></i>
+                        <div class="align-self-center">
+                            <i class="fas fa-check-circle fa-2x"></i>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100">
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
                 <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="flex-grow-1">
-                            <h6 class="card-title text-muted mb-1">Today's Revenue</h6>
-                            <h3 class="mb-0 text-primary">$@dashboardData.TodaysRevenue.ToString("N2")</h3>
-                            <small class="text-muted @(dashboardData.RevenueChange >= 0 ? "text-success" : "text-danger")">
-                                <i class="bi @(dashboardData.RevenueChange >= 0 ? "bi-arrow-up" : "bi-arrow-down")"></i>
-                                @Math.Abs(dashboardData.RevenueChange)% from yesterday
-                            </small>
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="card-title">@occupiedStations</h4>
+                            <p class="card-text">In Use</p>
                         </div>
-                        <div class="p-3 bg-primary bg-opacity-10 rounded-circle">
-                            <i class="bi bi-cash-stack text-primary fs-4"></i>
+                        <div class="align-self-center">
+                            <i class="fas fa-user fa-2x"></i>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100">
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
                 <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div class="flex-grow-1">
-                            <h6 class="card-title text-muted mb-1">System Health</h6>
-                            <h3 class="mb-0 @(dashboardData.SystemHealthStatus == "Healthy" ? "text-success" : "text-warning")">
-                                @dashboardData.SystemHealthStatus
-                            </h3>
-                            <small class="text-muted">Last checked: @dashboardData.LastHealthCheck.ToString("HH:mm")</small>
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="card-title">$@todayRevenue.ToString("F2")</h4>
+                            <p class="card-text">Today's Revenue</p>
                         </div>
-                        <div class="p-3 @(dashboardData.SystemHealthStatus == "Healthy" ? "bg-success" : "bg-warning") bg-opacity-10 rounded-circle">
-                            <i class="bi @(dashboardData.SystemHealthStatus == "Healthy" ? "bi-heart-pulse text-success" : "bi-exclamation-triangle text-warning") fs-4"></i>
+                        <div class="align-self-center">
+                            <i class="fas fa-dollar-sign fa-2x"></i>
                         </div>
                     </div>
                 </div>
@@ -112,267 +76,157 @@ else
         </div>
     </div>
 
-    <!-- Charts and Recent Activity -->
-    <div class="row g-3 mb-4">
-        <!-- Revenue Chart -->
-        <div class="col-xl-8">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-header bg-white border-0 pb-0">
-                    <h5 class="card-title mb-0">Revenue Trends (Last 7 Days)</h5>
+    <!-- Live Stations Status -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="fas fa-desktop me-2"></i>Live Station Status</h5>
                 </div>
                 <div class="card-body">
-                    <canvas id="revenueChart" height="200"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <!-- System Status -->
-        <div class="col-xl-4">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-header bg-white border-0 pb-0">
-                    <h5 class="card-title mb-0">System Status</h5>
-                </div>
-                <div class="card-body">
-                    <div class="list-group list-group-flush">
-                        <div class="list-group-item d-flex justify-content-between align-items-center p-0 mb-2">
-                            <div>
-                                <i class="bi bi-server me-2 text-success"></i>
-                                API Server
-                            </div>
-                            <span class="badge bg-success">Online</span>
-                        </div>
-                        <div class="list-group-item d-flex justify-content-between align-items-center p-0 mb-2">
-                            <div>
-                                <i class="bi bi-database me-2 text-success"></i>
-                                Database
-                            </div>
-                            <span class="badge bg-success">Connected</span>
-                        </div>
-                        <div class="list-group-item d-flex justify-content-between align-items-center p-0 mb-2">
-                            <div>
-                                <i class="bi bi-wifi me-2 text-success"></i>
-                                Network
-                            </div>
-                            <span class="badge bg-success">Stable</span>
-                        </div>
-                        <div class="list-group-item d-flex justify-content-between align-items-center p-0 mb-2">
-                            <div>
-                                <i class="bi bi-hdd me-2 text-warning"></i>
-                                Storage
-                            </div>
-                            <span class="badge bg-warning">@dashboardData.StorageUsage% Used</span>
-                        </div>
+                    <div class="row">
+                        @if (stations != null)
+                        {
+                            @foreach (var station in stations)
+                            {
+                                <div class="col-md-6 col-lg-4 mb-3">
+                                    <div class="card @(GetStationCardClass(station))">
+                                        <div class="card-body">
+                                            <h6 class="card-title">@station.StationName</h6>
+                                            <p class="card-text">
+                                                <strong>Type:</strong> @station.StationType<br>
+                                                <strong>Rate:</strong> $@station.HourlyRate/hr<br>
+                                                <strong>Status:</strong> @(station.IsAvailable ? "Available" : "In Use")
+                                                @if (station.CurrentUser != null)
+                                                {
+                                                    <br><strong>User:</strong> @station.CurrentUser.Username
+                                                    <br><strong>Started:</strong> @station.SessionStartTime?.ToString("HH:mm")
+                                                }
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        }
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Recent Activity and Quick Actions -->
-    <div class="row g-3">
-        <!-- Recent Sessions -->
-        <div class="col-xl-6">
-            <div class="card border-0 shadow-sm">
-                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
-                    <h5 class="card-title mb-0">Recent Sessions</h5>
-                    <a href="/sessions" class="btn btn-sm btn-outline-primary">View All</a>
+    <!-- Recent Sessions -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Recent Sessions</h5>
                 </div>
-                <div class="card-body p-0">
-                    @if (dashboardData.RecentSessions?.Any() == true)
-                    {
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0">
-                                <tbody>
-                                    @foreach (var session in dashboardData.RecentSessions.Take(5))
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Station</th>
+                                    <th>User</th>
+                                    <th>Start Time</th>
+                                    <th>End Time</th>
+                                    <th>Duration</th>
+                                    <th>Cost</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (recentSessions != null)
+                                {
+                                    @foreach (var session in recentSessions)
                                     {
                                         <tr>
-                                            <td class="border-0">
-                                                <div class="d-flex align-items-center">
-                                                    <div class="bg-primary bg-opacity-10 rounded-circle p-2 me-3">
-                                                        <i class="bi bi-person text-primary"></i>
-                                                    </div>
-                                                    <div>
-                                                        <h6 class="mb-0">@session.UserName</h6>
-                                                        <small class="text-muted">Station @session.StationNumber</small>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td class="border-0 text-end">
-                                                <div class="text-success fw-semibold">@session.Duration</div>
-                                                <small class="text-muted">@session.StartTime.ToString("HH:mm")</small>
+                                            <td>@session.Station.StationName</td>
+                                            <td>@session.User.Username</td>
+                                            <td>@session.StartTime.ToString("dd/MM HH:mm")</td>
+                                            <td>@(session.EndTime?.ToString("dd/MM HH:mm") ?? "Active")</td>
+                                            <td>@(session.Duration?.ToString(@"hh\:mm") ?? CalculateCurrentDuration(session.StartTime))</td>
+                                            <td>$@session.TotalCost.ToString("F2")</td>
+                                            <td>
+                                                <span class="badge @GetSessionStatusClass(session.Status)">
+                                                    @session.Status
+                                                </span>
                                             </td>
                                         </tr>
                                     }
-                                </tbody>
-                            </table>
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="text-center py-4 text-muted">
-                            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
-                            No recent sessions
-                        </div>
-                    }
-                </div>
-            </div>
-        </div>
-
-        <!-- Quick Actions -->
-        <div class="col-xl-6">
-            <div class="card border-0 shadow-sm">
-                <div class="card-header bg-white border-0">
-                    <h5 class="card-title mb-0">Quick Actions</h5>
-                </div>
-                <div class="card-body">
-                    <div class="row g-2">
-                        <div class="col-6">
-                            <a href="/users/create" class="btn btn-outline-primary w-100 py-3">
-                                <i class="bi bi-person-plus d-block fs-4 mb-1"></i>
-                                Add User
-                            </a>
-                        </div>
-                        <div class="col-6">
-                            <a href="/stations/create" class="btn btn-outline-success w-100 py-3">
-                                <i class="bi bi-plus-circle d-block fs-4 mb-1"></i>
-                                Add Station
-                            </a>
-                        </div>
-                        <div class="col-6">
-                            <a href="/system/backups" class="btn btn-outline-warning w-100 py-3">
-                                <i class="bi bi-shield-check d-block fs-4 mb-1"></i>
-                                Backup Data
-                            </a>
-                        </div>
-                        <div class="col-6">
-                            <a href="/reports/revenue" class="btn btn-outline-info w-100 py-3">
-                                <i class="bi bi-bar-chart d-block fs-4 mb-1"></i>
-                                View Reports
-                            </a>
-                        </div>
+                                }
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-}
+</div>
 
 @code {
-    private bool isLoading = true;
-    private DashboardData dashboardData = new();
+    private List<GameStation>? stations;
+    private List<GameSession>? recentSessions;
+    private int totalStations;
+    private int availableStations;
+    private int occupiedStations;
+    private decimal todayRevenue;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadDashboardData();
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender && !isLoading)
-        {
-            await InitializeCharts();
-        }
-    }
-
     private async Task LoadDashboardData()
     {
-        isLoading = true;
-        try
-        {
-            // In a real implementation, these would be separate API calls
-            dashboardData = new DashboardData
-            {
-                ActiveSessions = 24,
-                TotalUsers = 156,
-                AvailableStations = 8,
-                TotalStations = 12,
-                TodaysRevenue = 1247.50m,
-                RevenueChange = 12.5m,
-                SystemHealthStatus = "Healthy",
-                LastHealthCheck = DateTime.Now.AddMinutes(-5),
-                StorageUsage = 67,
-                RecentSessions = GenerateRecentSessions()
-            };
-        }
-        catch (Exception ex)
-        {
-            await NotificationService.AddNotificationAsync("Error loading dashboard data", $"Failed to load dashboard: {ex.Message}", NotificationType.Error);
-        }
-        finally
-        {
-            isLoading = false;
-        }
-    }
+        // Load stations with current users
+        stations = await DbContext.GameStations
+            .Include(s => s.CurrentUser)
+            .Where(s => s.IsActive)
+            .ToListAsync();
 
-    private async Task RefreshData()
-    {
-        Logger.LogDebug("Dashboard.RefreshData clicked");
-        await LoadDashboardData();
+        // Load recent sessions
+        recentSessions = await DbContext.GameSessions
+            .Include(s => s.Station)
+            .Include(s => s.User)
+            .OrderByDescending(s => s.StartTime)
+            .Take(10)
+            .ToListAsync();
+
+        // Calculate stats
+        totalStations = stations.Count;
+        availableStations = stations.Count(s => s.IsAvailable);
+        occupiedStations = stations.Count(s => !s.IsAvailable);
+
+        // Calculate today's revenue
+        var today = DateTime.Today;
+        todayRevenue = await DbContext.GameSessions
+            .Where(s => s.StartTime.Date == today && s.Status == SessionStatus.Completed)
+            .SumAsync(s => s.TotalCost);
+
         StateHasChanged();
     }
 
-    private async Task ExportReport()
+    private string GetStationCardClass(GameStation station)
     {
-        Logger.LogDebug("Dashboard.ExportReport clicked");
-        // Implement export functionality
-        await NotificationService.AddNotificationAsync("Export Started", "Dashboard report export has been initiated", NotificationType.Info);
+        return station.IsAvailable ? "border-success" : "border-warning";
     }
 
-    private async Task InitializeCharts()
+    private string GetSessionStatusClass(SessionStatus status)
     {
-        try
+        return status switch
         {
-            var revenueData = new[] { 750, 920, 1100, 890, 1350, 980, 1247 };
-            var labels = new[] { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" };
-
-            await JSRuntime.InvokeVoidAsync("initializeRevenueChart", "revenueChart", labels, revenueData);
-        }
-        catch (Exception ex)
-        {
-            // Chart initialization failed - not critical
-            Console.WriteLine($"Chart initialization failed: {ex.Message}");
-        }
+            SessionStatus.Active => "bg-warning",
+            SessionStatus.Completed => "bg-success",
+            SessionStatus.Cancelled => "bg-danger",
+            SessionStatus.Paused => "bg-secondary",
+            _ => "bg-light"
+        };
     }
 
-    private List<RecentSession> GenerateRecentSessions()
+    private string CalculateCurrentDuration(DateTime startTime)
     {
-        var sessions = new List<RecentSession>();
-        var userNames = new[] { "John Doe", "Alice Smith", "Bob Johnson", "Sarah Wilson", "Mike Davis" };
-        var random = new Random();
-        
-        for (int i = 0; i < 5; i++)
-        {
-            sessions.Add(new RecentSession
-            {
-                UserName = userNames[i],
-                StationNumber = random.Next(1, 13),
-                Duration = $"{random.Next(30, 240)} min",
-                StartTime = DateTime.Now.AddHours(-random.Next(1, 8))
-            });
-        }
-        
-        return sessions.OrderByDescending(s => s.StartTime).ToList();
-    }
-
-    public class DashboardData
-    {
-        public int ActiveSessions { get; set; }
-        public int TotalUsers { get; set; }
-        public int AvailableStations { get; set; }
-        public int TotalStations { get; set; }
-        public decimal TodaysRevenue { get; set; }
-        public decimal RevenueChange { get; set; }
-        public string SystemHealthStatus { get; set; } = "Unknown";
-        public DateTime LastHealthCheck { get; set; }
-        public int StorageUsage { get; set; }
-        public List<RecentSession> RecentSessions { get; set; } = new();
-    }
-
-    public class RecentSession
-    {
-        public string UserName { get; set; } = string.Empty;
-        public int StationNumber { get; set; }
-        public string Duration { get; set; } = string.Empty;
-        public DateTime StartTime { get; set; }
+        var duration = DateTime.Now - startTime;
+        return duration.ToString(@"hh\:mm");
     }
 }
