@@ -1,4 +1,7 @@
 ﻿@inherits LayoutComponentBase
+@inject AdminAuthService AuthService
+@inject AdminNotificationService NotificationService
+@inject NavigationManager Navigation
 
 <div class="page">
     <div class="sidebar">
@@ -7,7 +10,55 @@
 
     <main>
         <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="navbar-brand">
+                    <i class="bi bi-controller"></i>
+                    Gaming Cafe Admin
+                </div>
+                
+                <div class="d-flex align-items-center">
+                    <div class="dropdown me-3">
+                        <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-bell"></i>
+                            <span class="badge bg-danger">@NotificationService.GetRecentNotifications(10)?.Count ?? 0</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            @if (NotificationService.GetRecentNotifications(5)?.Any() == true)
+                            {
+                                @foreach (var notification in NotificationService.GetRecentNotifications(5))
+                                {
+                                    <li>
+                                        <div class="dropdown-item-text small">
+                                            <strong>@notification.Title</strong>
+                                            <div class="text-muted small">@notification.Message</div>
+                                            <div class="text-muted small">@notification.Timestamp.ToString("HH:mm")</div>
+                                        </div>
+                                    </li>
+                                }
+                            }
+                            else
+                            {
+                                <li><span class="dropdown-item-text">No notifications</span></li>
+                            }
+                        </ul>
+                    </div>
+                    
+                    <div class="dropdown">
+                        <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-person-circle"></i>
+                            Admin
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="/profile"><i class="bi bi-person"></i> Profile</a></li>
+                            <li><a class="dropdown-item" href="/settings"><i class="bi bi-gear"></i> Settings</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><button class="dropdown-item" @onclick="LogoutAsync">
+                                <i class="bi bi-box-arrow-right"></i> Logout
+                            </button></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <article class="content px-4">
@@ -21,3 +72,11 @@
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    private async Task LogoutAsync()
+    {
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/login", true);
+    }
+}

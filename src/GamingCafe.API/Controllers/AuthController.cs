@@ -1,10 +1,15 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Asp.Versioning;
 using GamingCafe.API.Services;
 using GamingCafe.Core.Models;
 using GamingCafe.Core.DTOs;
 using GamingCafe.Core.Interfaces.Services;
+using GamingCafe.Data;
+using Microsoft.AspNetCore.DataProtection;
+using OtpNet;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.EntityFrameworkCore;
+using System.Text;
 
 namespace GamingCafe.API.Controllers;
 
@@ -14,9 +19,16 @@ public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
 
-    public AuthController(IAuthService authService)
+    private readonly GamingCafeContext _context;
+    private readonly IDataProtectionProvider _dataProtectionProvider;
+    private readonly IWebHostEnvironment _env;
+
+    public AuthController(IAuthService authService, GamingCafeContext context, IDataProtectionProvider dataProtectionProvider, IWebHostEnvironment env)
     {
         _authService = authService;
+        _context = context;
+        _dataProtectionProvider = dataProtectionProvider;
+        _env = env;
     }
 
     [HttpPost("login")]
@@ -328,6 +340,45 @@ public class AuthController : ControllerBase
             return BadRequest($"Error checking 2FA status: {ex.Message}");
         }
     }
+
+    // Development-only helper to retrieve the current TOTP code for a seeded user.
+    // This endpoint is intentionally available only when the app runs in Development.
+    [HttpPost("dev/get-2fa-code")]
+    public async Task<IActionResult> GetTwoFactorCodeForDev([FromBody] DevTwoFactorRequest request)
+    {
+        if (!_env.IsDevelopment())
+            return NotFound();
+
+        if (string.IsNullOrEmpty(request?.Email))
+            return BadRequest("Email is required");
+
+        try
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email && u.IsActive);
+            if (user == null || string.IsNullOrEmpty(user.TwoFactorSecretKey))
+                return BadRequest("No 2FA secret found for user");
+
+            var protector = _dataProtectionProvider.CreateProtector("TwoFactorSecrets.v1");
+            object? unprotected = protector.Unprotect(user.TwoFactorSecretKey);
+            string secretString;
+            if (unprotected is string s)
+                secretString = s;
+            else if (unprotected is byte[] b)
+                secretString = Encoding.UTF8.GetString(b);
+            else
+                secretString = unprotected?.ToString() ?? string.Empty;
+
+            var keyBytes = Base32Encoding.ToBytes(secretString);
+            var totp = new Totp(keyBytes);
+            var code = totp.ComputeTotp();
+
+            return Ok(new { code });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest($"Error retrieving 2FA code: {ex.Message}");
+        }
+    }
 }
 
 // Additional DTOs for new endpoints
@@ -355,4 +406,9 @@ public class LogoutRequest
 public class TwoFactorConfirmSetupRequest
 {
     public string Code { get; set; } = string.Empty;
+}
+
+public class DevTwoFactorRequest
+{
+    public string Email { get; set; } = string.Empty;
 }

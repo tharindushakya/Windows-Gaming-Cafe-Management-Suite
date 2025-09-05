@@ -4,6 +4,7 @@
 @inject IPOSService POSService
 @inject IStationService StationService
 @inject IJSRuntime JSRuntime
+@inject ILogger<POS> Logger
 @rendermode InteractiveServer
 
 <PageTitle>POS Management</PageTitle>
@@ -455,20 +456,22 @@
 
     private void SetActiveTab(string tab)
     {
+        Logger.LogDebug("POS.SetActiveTab -> {tab}", tab);
         activeTab = tab;
         StateHasChanged();
     }
 
     private async Task LaunchPOSApp()
     {
+        Logger.LogDebug("POS.LaunchPOSApp clicked");
         await JSRuntime.InvokeVoidAsync("alert", 
             "To launch the POS Desktop Application, run this command in a terminal:\n\n" +
             "dotnet run --project src/GamingCafe.POS\n\n" +
             "The POS app will open in a new window with all the new features:\n" +
-            "• Settings Management\n" +
-            "• Daily Reports\n" +
-            "• Station Control\n" +
-            "• Fixed Payment Modals");
+            " Settings Management\n" +
+            " Daily Reports\n" +
+            " Station Control\n" +
+            " Fixed Payment Modals");
     }
 
     private async Task ExportTransactions()

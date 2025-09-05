@@ -1,9 +1,16 @@
 @page "/sessions"
+<PageTitle>Active Sessions</PageTitle>
+<div class="container">
+    <h1>Active Sessions</h1>
+    <p>Placeholder for active sessions.</p>
+</div>
+@page "/sessions"
 @using GamingCafe.Core.Models
 @using GamingCafe.Data
 @using Microsoft.EntityFrameworkCore
 @inject GamingCafeContext DbContext
 @inject IJSRuntime JSRuntime
+@inject ILogger<Sessions> Logger
 
 <PageTitle>Gaming Sessions</PageTitle>
 
@@ -211,11 +218,13 @@
 
     private async Task ShowAddSessionModal()
     {
+        Logger.LogDebug("Sessions.ShowAddSessionModal clicked");
         await JSRuntime.InvokeVoidAsync("alert", "Start Session functionality coming soon!");
     }
 
     private async Task EndSession(GameSession session)
     {
+        Logger.LogDebug("Sessions.EndSession clicked for {sessionId}", session.SessionId);
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"End session for {session.User?.Username} on {session.Station?.StationName}?");
         if (confirmed)
         {
@@ -243,6 +252,7 @@
 
     private async Task MarkAsPaid(GameSession session)
     {
+        Logger.LogDebug("Sessions.MarkAsPaid clicked for {sessionId}", session.SessionId);
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Mark session as paid? Amount: ${session.TotalCost:F2}");
         if (confirmed)
         {
@@ -255,6 +265,7 @@
 
     private async Task ViewSessionDetails(GameSession session)
     {
+        Logger.LogDebug("Sessions.ViewSessionDetails clicked for {sessionId}", session.SessionId);
         var details = $"Session Details:\n" +
                      $"User: {session.User?.Username ?? "Unknown"}\n" +
                      $"Station: {session.Station?.StationName ?? "Unknown"}\n" +

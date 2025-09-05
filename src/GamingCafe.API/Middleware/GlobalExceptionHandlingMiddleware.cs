@@ -49,15 +49,25 @@ public class GlobalExceptionHandlingMiddleware
 
         context.Response.StatusCode = (int)statusCode;
 
+        // Include detailed exception string in development environment for easier debugging
+        string[]? details = exception switch
+        {
+            ValidationException validationEx => validationEx.Errors?.ToArray(),
+            _ => null
+        };
+
+        var env = context.RequestServices.GetService(typeof(Microsoft.AspNetCore.Hosting.IWebHostEnvironment)) as Microsoft.AspNetCore.Hosting.IWebHostEnvironment;
+        if (env != null && env.IsDevelopment())
+        {
+            // append full exception for dev only
+            details = details == null ? new[] { exception.ToString() } : details.Concat(new[] { exception.ToString() }).ToArray();
+        }
+
         var response = new ErrorResponse
         {
             StatusCode = (int)statusCode,
             Message = message,
-            Details = exception switch
-            {
-                ValidationException validationEx => validationEx.Errors?.ToArray(),
-                _ => null
-            },
+            Details = details,
             TraceId = context.TraceIdentifier
         };
 

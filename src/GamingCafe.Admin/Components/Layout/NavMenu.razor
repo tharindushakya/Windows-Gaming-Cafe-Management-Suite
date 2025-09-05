@@ -1,60 +1,359 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
+﻿@inject AdminNotificationService NotificationService
+@inject NavigationManager Navigation
+@inject ILogger<NavMenu> Logger
+@implements IDisposable
+
+<div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href=""><i class="fas fa-gamepad me-2"></i>Gaming Café Admin</a>
+        <a class="navbar-brand" href="">
+            <i class="bi bi-controller me-2"></i>
+            Gaming Café Admin
+        </a>
     </div>
 </div>
 
 <input type="checkbox" title="Navigation menu" class="navbar-toggler" />
 
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="dashboard" Match="NavLinkMatch.All">
-                <i class="fas fa-tachometer-alt me-2"></i> Dashboard
+    <nav class="navbar-nav flex-column">
+        <!-- Dashboard -->
+        <li class="nav-item px-3">
+            <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">
+                <i class="bi bi-speedometer2 me-2"></i>
+                Dashboard
+                @if (unreadCount > 0)
+                {
+                    <span class="badge bg-danger ms-auto">@unreadCount</span>
+                }
             </NavLink>
-        </div>
+        </li>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="stations">
-                <i class="fas fa-desktop me-2"></i> Stations
-            </NavLink>
-        </div>
+        <!-- User Management -->
+        <li class="nav-item px-3">
+            <div class="nav-link" @onclick="ToggleUsersSubmenu" style="cursor: pointer;">
+                <i class="bi bi-people me-2"></i>
+                User Management
+                <i class="bi @(showUsersSubmenu ? "bi-chevron-down" : "bi-chevron-right") ms-auto"></i>
+            </div>
+            @if (showUsersSubmenu)
+            {
+                <ul class="nav flex-column ms-3">
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/users">
+                            <i class="bi bi-person-lines-fill me-2"></i>
+                            All Users
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/users/create">
+                            <i class="bi bi-person-plus me-2"></i>
+                            Add User
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/users/roles">
+                            <i class="bi bi-shield-check me-2"></i>
+                            User Roles
+                        </NavLink>
+                    </li>
+                </ul>
+            }
+        </li>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="users">
-                <i class="fas fa-users me-2"></i> Users
-            </NavLink>
-        </div>
+        <!-- Station Management -->
+        <li class="nav-item px-3">
+            <div class="nav-link" @onclick="ToggleStationsSubmenu" style="cursor: pointer;">
+                <i class="bi bi-pc-display me-2"></i>
+                Gaming Stations
+                <i class="bi @(showStationsSubmenu ? "bi-chevron-down" : "bi-chevron-right") ms-auto"></i>
+            </div>
+            @if (showStationsSubmenu)
+            {
+                <ul class="nav flex-column ms-3">
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/stations">
+                            <i class="bi bi-display me-2"></i>
+                            All Stations
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/stations/create">
+                            <i class="bi bi-plus-circle me-2"></i>
+                            Add Station
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/stations/monitoring">
+                            <i class="bi bi-activity me-2"></i>
+                            Station Monitor
+                        </NavLink>
+                    </li>
+                </ul>
+            }
+        </li>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="sessions">
-                <i class="fas fa-clock me-2"></i> Sessions
-            </NavLink>
-        </div>
+        <!-- Game Sessions -->
+        <li class="nav-item px-3">
+            <div class="nav-link" @onclick="ToggleSessionsSubmenu" style="cursor: pointer;">
+                <i class="bi bi-controller me-2"></i>
+                Game Sessions
+                <i class="bi @(showSessionsSubmenu ? "bi-chevron-down" : "bi-chevron-right") ms-auto"></i>
+            </div>
+            @if (showSessionsSubmenu)
+            {
+                <ul class="nav flex-column ms-3">
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/sessions">
+                            <i class="bi bi-list-ul me-2"></i>
+                            Active Sessions
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/sessions/history">
+                            <i class="bi bi-clock-history me-2"></i>
+                            Session History
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/reservations">
+                            <i class="bi bi-calendar-check me-2"></i>
+                            Reservations
+                        </NavLink>
+                    </li>
+                </ul>
+            }
+        </li>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="pos">
-                <i class="fas fa-cash-register me-2"></i> POS
-            </NavLink>
-        </div>
+        <!-- Financial Management -->
+        <li class="nav-item px-3">
+            <div class="nav-link" @onclick="ToggleFinancialSubmenu" style="cursor: pointer;">
+                <i class="bi bi-cash-stack me-2"></i>
+                Financial
+                <i class="bi @(showFinancialSubmenu ? "bi-chevron-down" : "bi-chevron-right") ms-auto"></i>
+            </div>
+            @if (showFinancialSubmenu)
+            {
+                <ul class="nav flex-column ms-3">
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/transactions">
+                            <i class="bi bi-receipt me-2"></i>
+                            Transactions
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/wallets">
+                            <i class="bi bi-wallet2 me-2"></i>
+                            User Wallets
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/loyalty">
+                            <i class="bi bi-star me-2"></i>
+                            Loyalty Program
+                        </NavLink>
+                    </li>
+                </ul>
+            }
+        </li>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="inventory">
-                <i class="fas fa-boxes me-2"></i> Inventory
-            </NavLink>
-        </div>
+        <!-- Inventory & Products -->
+        <li class="nav-item px-3">
+            <div class="nav-link" @onclick="ToggleInventorySubmenu" style="cursor: pointer;">
+                <i class="bi bi-box-seam me-2"></i>
+                Inventory
+                <i class="bi @(showInventorySubmenu ? "bi-chevron-down" : "bi-chevron-right") ms-auto"></i>
+            </div>
+            @if (showInventorySubmenu)
+            {
+                <ul class="nav flex-column ms-3">
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/products">
+                            <i class="bi bi-bag me-2"></i>
+                            Products
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/inventory">
+                            <i class="bi bi-boxes me-2"></i>
+                            Stock Management
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/consoles">
+                            <i class="bi bi-joystick me-2"></i>
+                            Game Consoles
+                        </NavLink>
+                    </li>
+                </ul>
+            }
+        </li>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="reports">
-                <i class="fas fa-chart-bar me-2"></i> Reports
-            </NavLink>
-        </div>
+        <!-- Reports & Analytics -->
+        <li class="nav-item px-3">
+            <div class="nav-link" @onclick="ToggleReportsSubmenu" style="cursor: pointer;">
+                <i class="bi bi-graph-up me-2"></i>
+                Reports
+                <i class="bi @(showReportsSubmenu ? "bi-chevron-down" : "bi-chevron-right") ms-auto"></i>
+            </div>
+            @if (showReportsSubmenu)
+            {
+                <ul class="nav flex-column ms-3">
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/reports/revenue">
+                            <i class="bi bi-bar-chart me-2"></i>
+                            Revenue Reports
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/reports/usage">
+                            <i class="bi bi-pie-chart me-2"></i>
+                            Usage Analytics
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/reports/performance">
+                            <i class="bi bi-speedometer me-2"></i>
+                            Performance
+                        </NavLink>
+                    </li>
+                </ul>
+            }
+        </li>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="consoles">
-                <i class="fas fa-gamepad me-2"></i> Consoles
-            </NavLink>
-        </div>
+        <!-- System Management -->
+        <li class="nav-item px-3">
+            <div class="nav-link" @onclick="ToggleSystemSubmenu" style="cursor: pointer;">
+                <i class="bi bi-gear me-2"></i>
+                System
+                <i class="bi @(showSystemSubmenu ? "bi-chevron-down" : "bi-chevron-right") ms-auto"></i>
+            </div>
+            @if (showSystemSubmenu)
+            {
+                <ul class="nav flex-column ms-3">
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/system/health">
+                            <i class="bi bi-heart-pulse me-2"></i>
+                            System Health
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/system/backups">
+                            <i class="bi bi-shield-check me-2"></i>
+                            Backups
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/system/logs">
+                            <i class="bi bi-file-text me-2"></i>
+                            System Logs
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link py-1" href="/system/settings">
+                            <i class="bi bi-sliders me-2"></i>
+                            Settings
+                        </NavLink>
+                    </li>
+                </ul>
+            }
+        </li>
     </nav>
 </div>
+
+@code {
+    private bool showUsersSubmenu = false;
+    private bool showStationsSubmenu = false;
+    private bool showSessionsSubmenu = false;
+    private bool showFinancialSubmenu = false;
+    private bool showInventorySubmenu = false;
+    private bool showReportsSubmenu = false;
+    private bool showSystemSubmenu = false;
+    private int unreadCount = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+    Logger.LogDebug("NavMenu.OnInitializedAsync");
+        NotificationService.OnNotificationAdded += UpdateNotificationCount;
+        unreadCount = await NotificationService.GetUnreadCountAsync();
+
+        // Auto-expand current section based on URL
+        var currentPath = Navigation.ToBaseRelativePath(Navigation.Uri);
+        ExpandCurrentSection(currentPath);
+    }
+
+    private void ExpandCurrentSection(string path)
+    {
+        if (path.StartsWith("users"))
+            showUsersSubmenu = true;
+        else if (path.StartsWith("stations"))
+            showStationsSubmenu = true;
+        else if (path.StartsWith("sessions") || path.StartsWith("reservations"))
+            showSessionsSubmenu = true;
+        else if (path.StartsWith("transactions") || path.StartsWith("wallets") || path.StartsWith("loyalty"))
+            showFinancialSubmenu = true;
+        else if (path.StartsWith("products") || path.StartsWith("inventory") || path.StartsWith("consoles"))
+            showInventorySubmenu = true;
+        else if (path.StartsWith("reports"))
+            showReportsSubmenu = true;
+        else if (path.StartsWith("system"))
+            showSystemSubmenu = true;
+    }
+
+    private void UpdateNotificationCount(int _)
+    {
+        Logger.LogDebug("NavMenu.UpdateNotificationCount triggered");
+        InvokeAsync(async () =>
+        {
+            unreadCount = await NotificationService.GetUnreadCountAsync();
+            StateHasChanged();
+        });
+    }
+
+    private void ToggleUsersSubmenu()
+    {
+        showUsersSubmenu = !showUsersSubmenu;
+        Logger.LogDebug("ToggleUsersSubmenu -> {state}", showUsersSubmenu);
+    }
+
+    private void ToggleStationsSubmenu()
+    {
+        showStationsSubmenu = !showStationsSubmenu;
+        Logger.LogDebug("ToggleStationsSubmenu -> {state}", showStationsSubmenu);
+    }
+
+    private void ToggleSessionsSubmenu()
+    {
+        showSessionsSubmenu = !showSessionsSubmenu;
+        Logger.LogDebug("ToggleSessionsSubmenu -> {state}", showSessionsSubmenu);
+    }
+
+    private void ToggleFinancialSubmenu()
+    {
+        showFinancialSubmenu = !showFinancialSubmenu;
+        Logger.LogDebug("ToggleFinancialSubmenu -> {state}", showFinancialSubmenu);
+    }
+
+    private void ToggleInventorySubmenu()
+    {
+        showInventorySubmenu = !showInventorySubmenu;
+        Logger.LogDebug("ToggleInventorySubmenu -> {state}", showInventorySubmenu);
+    }
+
+    private void ToggleReportsSubmenu()
+    {
+        showReportsSubmenu = !showReportsSubmenu;
+        Logger.LogDebug("ToggleReportsSubmenu -> {state}", showReportsSubmenu);
+    }
+
+    private void ToggleSystemSubmenu()
+    {
+        showSystemSubmenu = !showSystemSubmenu;
+        Logger.LogDebug("ToggleSystemSubmenu -> {state}", showSystemSubmenu);
+    }
+
+    public void Dispose()
+    {
+    NotificationService.OnNotificationAdded -= UpdateNotificationCount;
+    }
+}
 

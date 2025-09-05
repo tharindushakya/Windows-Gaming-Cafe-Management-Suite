@@ -3,6 +3,7 @@
 @using GamingCafe.Data
 @inject GamingCafeContext DbContext
 @inject IJSRuntime JSRuntime
+@inject ILogger<Consoles> Logger
 
 <PageTitle>Console Management</PageTitle>
 
@@ -197,16 +198,19 @@
 
     private async Task ShowAddConsoleModal()
     {
+        Logger.LogDebug("Consoles.ShowAddConsoleModal clicked");
         await JSRuntime.InvokeVoidAsync("alert", "Add Console functionality coming soon!");
     }
 
     private async Task EditConsole(GameConsole console)
     {
+        Logger.LogDebug("Consoles.EditConsole clicked for {console}", console?.ConsoleName);
         await JSRuntime.InvokeVoidAsync("alert", $"Edit Console {console.ConsoleName} functionality coming soon!");
     }
 
     private async Task ViewConsoleDetails(GameConsole console)
     {
+        Logger.LogDebug("Consoles.ViewConsoleDetails clicked for {console}", console?.ConsoleName);
         var message = $"Console Details:\n" +
                      $"Name: {console.ConsoleName}\n" +
                      $"Type: {console.Type}\n" +
@@ -220,11 +224,13 @@
 
     private async Task ManageConsoleGames(GameConsole console)
     {
+        Logger.LogDebug("Consoles.ManageConsoleGames clicked for {console}", console?.ConsoleName);
         await JSRuntime.InvokeVoidAsync("alert", $"Manage games for {console.ConsoleName} coming soon!");
     }
 
     private async Task DeleteConsole(int consoleId)
     {
+        Logger.LogDebug("Consoles.DeleteConsole invoked for id {id}", consoleId);
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this console?");
         if (confirmed)
         {
