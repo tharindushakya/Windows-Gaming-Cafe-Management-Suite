@@ -39,6 +39,7 @@ public class AuthService : IAuthService
     private readonly IBackgroundTaskQueue? _taskQueue;
     private readonly Microsoft.Extensions.Caching.Memory.IMemoryCache _cache;
     private readonly Microsoft.Extensions.Caching.Distributed.IDistributedCache? _distributedCache;
+    private readonly TimeSpan _twoFactorTtl;
 
     public AuthService(GamingCafeContext context, IConfiguration configuration, IServiceProvider serviceProvider, Microsoft.Extensions.Caching.Memory.IMemoryCache cache, Microsoft.Extensions.Caching.Distributed.IDistributedCache? distributedCache = null, IBackgroundTaskQueue? taskQueue = null)
     {
@@ -48,11 +49,14 @@ public class AuthService : IAuthService
         _cache = cache;
         _distributedCache = distributedCache;
         _taskQueue = taskQueue;
+        // TTL for transient 2FA tokens; config key: Auth:TwoFactor:TransientTtlMinutes
+        var ttlMinutes = _configuration.GetValue<int?>("Auth:TwoFactor:TransientTtlMinutes") ?? 5;
+        _twoFactorTtl = TimeSpan.FromMinutes(ttlMinutes);
     }
 
     private async Task SetTwoFactorTokenAsync(string token, int userId, TimeSpan ttl)
     {
-        var key = $"2fa:{token}";
+    var key = $"auth:2fa:{token}";
         if (_distributedCache != null)
         {
             var bytes = BitConverter.GetBytes(userId);
@@ -74,7 +78,7 @@ public class AuthService : IAuthService
 
     private async Task<int?> TryGetTwoFactorUserIdAsync(string token)
     {
-        var key = $"2fa:{token}";
+    var key = $"auth:2fa:{token}";
         if (_distributedCache != null)
         {
             try
@@ -97,7 +101,7 @@ public class AuthService : IAuthService
 
     private async Task RemoveTwoFactorTokenAsync(string token)
     {
-        var key = $"2fa:{token}";
+    var key = $"auth:2fa:{token}";
         if (_distributedCache != null)
         {
             await _distributedCache.RemoveAsync(key);
@@ -124,7 +128,7 @@ public class AuthService : IAuthService
                 var twoFactorToken = GenerateSecureToken();
                 // Store the 2FA token in an in-memory cache with a short TTL
                 // Prefer distributed cache (Redis) for multi-instance resilience; fall back to in-memory cache.
-                await SetTwoFactorTokenAsync(twoFactorToken, user.UserId, TimeSpan.FromMinutes(5));
+                await SetTwoFactorTokenAsync(twoFactorToken, user.UserId, _twoFactorTtl);
 
                 return new LoginResponse
                 {

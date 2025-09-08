@@ -510,3 +510,6 @@ using (var startupScope = app.Services.CreateScope())
 }
 
 app.Run();
+
+// Expose Program class for WebApplicationFactory in integration tests
+public partial class Program { }
