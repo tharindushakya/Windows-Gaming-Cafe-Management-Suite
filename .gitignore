@@ -47,6 +47,12 @@ ClientBin/
 node_modules/
 orleans.codegen.cs
 
+# Local secrets and user secrets
+.vscode/*secret*.json
+secrets.json
+appsettings.*.local.json
+.usersecrets
+
 # RIA/Silverlight projects
 Generated_Code/
 

@@ -27,6 +27,7 @@ using FluentValidation.AspNetCore;
 using GamingCafe.Core.Interfaces.Services;
 using GamingCafe.Core.Services;
 using StackExchange.Redis;
+using GamingCafe.Core.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -228,17 +229,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization(options =>
 {
     // Simple role-based policy for administrators
-    options.AddPolicy("RequireAdmin", policy => policy.RequireRole("Admin"));
+    options.AddPolicy(PolicyNames.RequireAdmin, policy => policy.RequireRole(RoleNames.Admin));
 
     // Manager or Admin can be used for mid-level operations
-    options.AddPolicy("RequireManagerOrAdmin", policy => policy.RequireAssertion(context =>
-        context.User.IsInRole("Admin") || context.User.IsInRole("Manager")
-    ));
+    options.AddPolicy(PolicyNames.RequireManagerOrAdmin, policy => policy.RequireRole(RoleNames.Admin, RoleNames.Manager));
 
     // Scope/claim based policy example for station management operations
-    options.AddPolicy("RequireStationScope", policy => policy.RequireClaim("scope", "stations.manage"));
+    options.AddPolicy(PolicyNames.RequireStationScope, policy => policy.RequireClaim("scope", "stations.manage"));
+
     // Owner-or-admin policy uses an IAuthorizationHandler registered below
-    options.AddPolicy("RequireOwnerOrAdmin", policy => policy.AddRequirements(new GamingCafe.API.Authorization.OwnershipRequirement()));
+    options.AddPolicy(PolicyNames.RequireOwnerOrAdmin, policy => policy.AddRequirements(new GamingCafe.API.Authorization.OwnershipRequirement()));
 });
 
 // Register authorization handlers

@@ -28,7 +28,7 @@ public class HangfireDashboardAuthFilter : IDashboardAuthorizationFilter
         // Fallback to role checks if Authorization service isn't registered (non-breaking)
         if (httpContext.User?.Identity?.IsAuthenticated == true)
         {
-            if (httpContext.User.IsInRole("Administrator") || httpContext.User.IsInRole("Admin"))
+            if (httpContext.User.IsInRole(RoleNames.Administrator) || httpContext.User.IsInRole(RoleNames.Admin))
                 return true;
         }
 

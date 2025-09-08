@@ -46,6 +46,11 @@ public class DatabaseSeeder
             return;
         }
 
+        // Read seed passwords from environment variables to avoid committing plaintext passwords.
+        var adminPassword = Environment.GetEnvironmentVariable("SEED_ADMIN_PASSWORD") ?? "<<SEED_ADMIN_PASSWORD>>";
+        var staffPassword = Environment.GetEnvironmentVariable("SEED_STAFF_PASSWORD") ?? "<<SEED_STAFF_PASSWORD>>";
+        var customerPassword = Environment.GetEnvironmentVariable("SEED_CUSTOMER_PASSWORD") ?? "<<SEED_CUSTOMER_PASSWORD>>";
+
         var users = new List<User>
         {
             new User
@@ -54,7 +59,7 @@ public class DatabaseSeeder
                 Email = "admin@gamingcafe.com",
                 FirstName = "Admin",
                 LastName = "User",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!"),
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminPassword),
                 Role = UserRole.Admin,
                 IsActive = true,
                 WalletBalance = 1000.00m,
@@ -66,7 +71,7 @@ public class DatabaseSeeder
                 Email = "staff1@gamingcafe.com",
                 FirstName = "Staff",
                 LastName = "One",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Staff123!"),
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(staffPassword),
                 Role = UserRole.Staff,
                 IsActive = true,
                 WalletBalance = 500.00m,
@@ -78,7 +83,7 @@ public class DatabaseSeeder
                 Email = "customer1@example.com",
                 FirstName = "John",
                 LastName = "Doe",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Customer123!"),
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(customerPassword),
                 Role = UserRole.Customer,
                 IsActive = true,
                 WalletBalance = 50.00m,
@@ -90,7 +95,7 @@ public class DatabaseSeeder
                 Email = "customer2@example.com",
                 FirstName = "Jane",
                 LastName = "Smith",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Customer123!"),
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(customerPassword),
                 Role = UserRole.Customer,
                 IsActive = true,
                 WalletBalance = 75.00m,

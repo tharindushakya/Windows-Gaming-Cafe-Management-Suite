@@ -7,10 +7,11 @@ var client = new HttpClient { BaseAddress = new Uri(apiBase) };
 
 async Task<JsonElement?> DoLoginGetResponseAsync(string? twoFactorCode = null, string? twoFactorToken = null)
 {
+    var loginPassword = Environment.GetEnvironmentVariable("API_SMOKE_TEST_PASSWORD") ?? "<<REPLACE_WITH_SMOKE_TEST_PASSWORD>>";
     var loginReq = new Dictionary<string, object?>
     {
         ["email"] = "admin@gamingcafe.com",
-        ["password"] = "Admin123!",
+        ["password"] = loginPassword,
     };
     if (!string.IsNullOrEmpty(twoFactorCode)) loginReq["twoFactorCode"] = twoFactorCode;
     if (!string.IsNullOrEmpty(twoFactorToken)) loginReq["twoFactorToken"] = twoFactorToken;

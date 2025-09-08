@@ -1,14 +1,18 @@
+using System;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 
 Console.WriteLine("Admin UI Smoke Test starting...");
-var apiBase = "http://localhost:5148";
+var apiBase = Environment.GetEnvironmentVariable("ADMIN_UI_SMOKE_TEST_API_BASE") ?? "http://localhost:5148";
 var client = new HttpClient { BaseAddress = new Uri(apiBase) };
+
+// Password is read from the environment to avoid committing credentials in source.
+var smokeTestPassword = Environment.GetEnvironmentVariable("ADMIN_UI_SMOKE_TEST_PASSWORD") ?? "<<ADMIN_UI_SMOKE_TEST_PASSWORD>>";
 
 async Task<string?> LoginWith2FA()
 {
-    var loginReq = new { email = "admin@gamingcafe.com", password = "Admin123!" };
+    var loginReq = new { email = "admin@gamingcafe.com", password = smokeTestPassword };
     var resp = await client.PostAsync("/api/auth/login", new StringContent(JsonSerializer.Serialize(loginReq), Encoding.UTF8, "application/json"));
     Console.WriteLine($"Login initial: {resp.StatusCode}");
     var body = await resp.Content.ReadAsStringAsync();
@@ -28,7 +32,7 @@ async Task<string?> LoginWith2FA()
         using var devDoc = JsonDocument.Parse(devBody);
         var code = devDoc.RootElement.GetProperty("code").GetString();
 
-        var loginWithCode = new { email = "admin@gamingcafe.com", password = "Admin123!", twoFactorCode = code, twoFactorToken = twoFactorToken };
+    var loginWithCode = new { email = "admin@gamingcafe.com", password = smokeTestPassword, twoFactorCode = code, twoFactorToken = twoFactorToken };
         var final = await client.PostAsync("/api/auth/login", new StringContent(JsonSerializer.Serialize(loginWithCode), Encoding.UTF8, "application/json"));
         if (!final.IsSuccessStatusCode) return null;
         var finalBody = await final.Content.ReadAsStringAsync();

@@ -8,8 +8,8 @@ public class OwnershipHandler : AuthorizationHandler<OwnershipRequirement>
 {
     protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, OwnershipRequirement requirement)
     {
-        // If user is admin, succeed
-        if (context.User?.IsInRole("Admin") == true)
+    // If user is admin, succeed
+    if (context.User?.IsInRole(GamingCafe.Core.Authorization.RoleNames.Admin) == true)
         {
             context.Succeed(requirement);
             return Task.CompletedTask;
