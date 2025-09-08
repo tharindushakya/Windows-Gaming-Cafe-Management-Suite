@@ -25,12 +25,9 @@ using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Register Data Protection services for encrypting sensitive data like 2FA secrets
-// Persist data protection keys to a local folder so keys survive restarts (dev-friendly)
-var keysDir = Path.Combine(builder.Environment.ContentRootPath, "keys");
-Directory.CreateDirectory(keysDir);
-builder.Services.AddDataProtection()
-    .PersistKeysToFileSystem(new System.IO.DirectoryInfo(keysDir));
+// NOTE: DataProtection key persistence is configured later below so we can prefer
+// a centralized store (Redis) when available. This avoids non-sticky local file
+// storage which breaks auth in scaled multi-instance deployments.
 
 // Configure Serilog - Comment out until Serilog packages are installed
 // builder.Host.UseSerilog((context, configuration) =>
@@ -57,34 +54,70 @@ builder.Services.AddApiVersioning(options =>
 builder.Services.AddDbContext<GamingCafeContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Configure Redis Cache - register only when a connection can be established
+// Configure Redis Cache (register the distributed cache client) but avoid connecting synchronously
 try
 {
     var redisConfig = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
-    // Add distributed cache config (this may still throw if configuration is invalid)
+    // Register IDistributedCache implementation using StackExchange Redis (will not create a ConnectionMultiplexer here)
     builder.Services.AddStackExchangeRedisCache(options =>
     {
         options.Configuration = redisConfig;
         options.InstanceName = "GamingCafe";
     });
-
-    // Attempt to establish a ConnectionMultiplexer at startup. If it fails, do not register a multiplexer
-    try
-    {
-        var connection = ConnectionMultiplexer.Connect(redisConfig);
-        builder.Services.AddSingleton<IConnectionMultiplexer>(connection);
-    }
-    catch (Exception ex)
-    {
-        var logger = LoggerFactory.Create(b => b.AddConsole()).CreateLogger<Program>();
-        logger.LogWarning(ex, "Failed to connect to Redis at startup. Skipping ConnectionMultiplexer registration; application will fall back to in-memory cache behavior where implemented.");
-    }
 }
 catch (Exception ex)
 {
-    // If Redis setup fails completely (invalid configuration), log and continue without Redis
     var logger = LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<Program>();
-    logger.LogWarning(ex, "Redis setup failed. Application will run without Redis cache.");
+    logger.LogWarning(ex, "Redis setup failed during registration. Application will run without Redis cache.");
+}
+
+// Respect DataProtection:UseRedis in configuration. Default to true to prefer Redis in multi-instance.
+var useRedisForDataProtection = builder.Configuration.GetValue<bool?>("DataProtection:UseRedis") ?? false;
+
+// Default to filesystem persistence now (safe dev default). For production, enable DataProtection:UseRedis = true
+// and configure DataProtection:Redis:Connection (or ConnectionStrings:Redis) and DataProtection:Redis:Key.
+var keysDir = Path.Combine(builder.Environment.ContentRootPath, "keys");
+Directory.CreateDirectory(keysDir);
+
+// Prepare the data protection builder so we can choose persistence at startup
+var dataProtectionBuilder = builder.Services.AddDataProtection()
+    .SetApplicationName("GamingCafe");
+
+var dpRedisKey = builder.Configuration["DataProtection:Redis:Key"] ?? "GamingCafe-DataProtection-Keys";
+
+if (useRedisForDataProtection)
+{
+    // Read connection string from DataProtection:Redis:Connection or ConnectionStrings:Redis
+    var dpRedisConnection = builder.Configuration["DataProtection:Redis:Connection"] ?? builder.Configuration.GetConnectionString("Redis");
+    if (string.IsNullOrWhiteSpace(dpRedisConnection))
+    {
+        var logger = LoggerFactory.Create(b => b.AddConsole()).CreateLogger("Program");
+        logger.LogWarning("DataProtection:UseRedis is true but no Redis connection string was found; falling back to file keys.");
+        dataProtectionBuilder.PersistKeysToFileSystem(new System.IO.DirectoryInfo(keysDir));
+    }
+    else
+    {
+        try
+        {
+            // Create and register ConnectionMultiplexer for application lifetime
+            var mux = ConnectionMultiplexer.Connect(dpRedisConnection);
+            builder.Services.AddSingleton<IConnectionMultiplexer>(mux);
+
+            // Persist DataProtection keys to StackExchange.Redis using the configured key
+            dataProtectionBuilder.PersistKeysToStackExchangeRedis(mux, dpRedisKey);
+        }
+        catch (Exception ex)
+        {
+            var logger = LoggerFactory.Create(b => b.AddConsole()).CreateLogger("Program");
+            logger.LogWarning(ex, "Failed to connect to Redis for DataProtection; falling back to filesystem keys.");
+            dataProtectionBuilder.PersistKeysToFileSystem(new System.IO.DirectoryInfo(keysDir));
+        }
+    }
+}
+else
+{
+    // Development or explicit opt-out: use local filesystem keys
+    dataProtectionBuilder.PersistKeysToFileSystem(new System.IO.DirectoryInfo(keysDir));
 }
 
 // Bind rate limiting options from config
@@ -304,6 +337,37 @@ builder.Services.AddSwaggerGen(opts =>
 var app = builder.Build();
 // Use forwarded headers middleware early so downstream middleware (rate limiter, logging) sees the correct client IP
 app.UseForwardedHeaders();
+
+// Startup verification: if Redis is configured for DataProtection, warn if no keys are present
+if (useRedisForDataProtection)
+{
+    try
+    {
+        var config = app.Services.GetService<IConfiguration>();
+        var dpRedisKeyCheck = config?["DataProtection:Redis:Key"] ?? "GamingCafe-DataProtection-Keys";
+        var mux = app.Services.GetService<IConnectionMultiplexer>();
+        if (mux == null)
+        {
+            var logger = app.Services.GetService<ILoggerFactory>()?.CreateLogger("Program");
+            logger?.LogWarning("DataProtection is configured to use Redis but no ConnectionMultiplexer is registered. Keys may be missing.");
+        }
+        else
+        {
+            var db = mux.GetDatabase();
+            var type = db.KeyType(dpRedisKeyCheck);
+            if (type == RedisType.None)
+            {
+                var logger = app.Services.GetService<ILoggerFactory>()?.CreateLogger("Program");
+                logger?.LogWarning("DataProtection: Redis key '{key}' does not exist or contains no keys. Ensure migration completed and Redis is reachable.", dpRedisKeyCheck);
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        var logger = app.Services.GetService<ILoggerFactory>()?.CreateLogger("Program");
+        logger?.LogWarning(ex, "Failed to verify DataProtection keys in Redis at startup.");
+    }
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
