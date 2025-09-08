@@ -1,3 +1,5 @@
+using GamingCafe.Core.Models;
+
 namespace GamingCafe.Core.DTOs;
 
 public class LoginRequest
@@ -91,8 +93,14 @@ public class UserDto
     public string Email { get; set; } = string.Empty;
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
-    public string Role { get; set; } = string.Empty;
+    public string PhoneNumber { get; set; } = string.Empty;
+    public DateTime DateOfBirth { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? LastLoginAt { get; set; }
+    public bool IsActive { get; set; } = true;
+    public UserRole Role { get; set; } = UserRole.Customer;
     public decimal WalletBalance { get; set; }
     public int LoyaltyPoints { get; set; }
+    public bool IsEmailVerified { get; set; }
     public bool IsTwoFactorEnabled { get; set; }
 }

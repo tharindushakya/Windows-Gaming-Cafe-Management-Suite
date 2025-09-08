@@ -73,14 +73,14 @@ public class AuthService : IAuthService
                 {
                     RequiresTwoFactor = true,
                     TwoFactorToken = twoFactorToken,
-                    User = new UserDto
+                        User = new UserDto
                     {
                         UserId = user.UserId,
                         Username = user.Username,
                         Email = user.Email,
                         FirstName = user.FirstName,
                         LastName = user.LastName,
-                        Role = user.Role.ToString(),
+                        Role = user.Role,
                         WalletBalance = user.WalletBalance,
                         LoyaltyPoints = user.LoyaltyPoints,
                         IsTwoFactorEnabled = user.IsTwoFactorEnabled
@@ -134,14 +134,14 @@ public class AuthService : IAuthService
             RefreshToken = refreshToken,
             ExpiresAt = DateTime.UtcNow.AddMinutes(15), // JWT expires in 15 minutes
             RequiresTwoFactor = false,
-            User = new UserDto
+                User = new UserDto
             {
                 UserId = user.UserId,
                 Username = user.Username,
                 Email = user.Email,
                 FirstName = user.FirstName,
                 LastName = user.LastName,
-                Role = user.Role.ToString(),
+                Role = user.Role,
                 WalletBalance = user.WalletBalance,
                 LoyaltyPoints = user.LoyaltyPoints,
                 IsTwoFactorEnabled = user.IsTwoFactorEnabled

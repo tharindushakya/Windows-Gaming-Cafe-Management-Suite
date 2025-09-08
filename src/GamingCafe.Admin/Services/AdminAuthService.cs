@@ -1,105 +1,185 @@
+using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Components.Authorization;
-using System.Security.Claims;
+using GamingCafe.Core.DTOs;
 
 namespace GamingCafe.Admin.Services;
 
 public class AdminAuthService
 {
-    private readonly AdminApiService _apiService;
-    private readonly ILogger<AdminAuthService> _logger;
+    private readonly HttpClient _httpClient;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IConfiguration _configuration;
+    private string? _baseUrl;
 
-    public AdminAuthService(AdminApiService apiService, ILogger<AdminAuthService> logger)
+    public AdminAuthService(
+        HttpClient httpClient, 
+        IHttpContextAccessor httpContextAccessor,
+        IConfiguration configuration)
     {
-        _apiService = apiService;
-        _logger = logger;
+        _httpClient = httpClient;
+        _httpContextAccessor = httpContextAccessor;
+        _configuration = configuration;
+        _baseUrl = _configuration["ApiSettings:BaseUrl"] ?? "https://localhost:7001";
     }
 
-    public async Task<LoginResult> LoginAsync(string email, string password)
+    public async Task<LoginResponse?> LoginAsync(LoginRequest request)
     {
-    _logger.LogDebug("AdminAuthService.LoginAsync called for {Email}", email);
         try
         {
-            var success = await _apiService.AuthenticateAsync(email, password);
-            if (success)
-            {
-                _logger.LogInformation("Admin user {Email} logged in successfully", email);
-                return new LoginResult { Success = true };
-            }
+            var json = JsonSerializer.Serialize(request);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
             
-            _logger.LogWarning("Failed login attempt for admin user {Email}", email);
-            return new LoginResult { Success = false, ErrorMessage = "Invalid credentials" };
+            var response = await _httpClient.PostAsync($"{_baseUrl}/api/auth/login", content);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseJson = await response.Content.ReadAsStringAsync();
+                var loginResponse = JsonSerializer.Deserialize<LoginResponse>(responseJson, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                if (loginResponse != null && !string.IsNullOrEmpty(loginResponse.AccessToken))
+                {
+                    await StoreTokenAsync(loginResponse.AccessToken);
+                    await CreateAuthenticationCookieAsync(loginResponse.User);
+                    return loginResponse;
+                }
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during admin login for {Email}", email);
-            return new LoginResult { Success = false, ErrorMessage = "Login failed due to an error" };
+            Console.WriteLine($"Login error: {ex.Message}");
         }
+
+        return null;
     }
 
-    public Task LogoutAsync()
+    public async Task LogoutAsync()
     {
-        _logger.LogDebug("AdminAuthService.LogoutAsync called");
-        try
+        var httpContext = _httpContextAccessor.HttpContext;
+        if (httpContext != null)
         {
-            _apiService.Logout();
-            _logger.LogInformation("Admin user logged out");
+            await httpContext.SignOutAsync("Cookies");
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error during admin logout");
-        }
-
-        return Task.CompletedTask;
+        
+        // Clear stored token
+        await ClearTokenAsync();
     }
 
-    public bool IsAuthenticated => _apiService.IsAuthenticated;
+    public async Task<string?> GetTokenAsync()
+    {
+        var httpContext = _httpContextAccessor.HttpContext;
+        if (httpContext?.User?.Identity?.IsAuthenticated == true)
+        {
+            return httpContext.User.FindFirst("AccessToken")?.Value;
+        }
+        return null;
+    }
+
+    public async Task<UserDto?> GetCurrentUserAsync()
+    {
+        var httpContext = _httpContextAccessor.HttpContext;
+        if (httpContext?.User?.Identity?.IsAuthenticated == true)
+        {
+            var userJson = httpContext.User.FindFirst("UserData")?.Value;
+            if (!string.IsNullOrEmpty(userJson))
+            {
+                return JsonSerializer.Deserialize<UserDto>(userJson, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+            }
+        }
+        return null;
+    }
+
+    public bool IsAuthenticated()
+    {
+        var httpContext = _httpContextAccessor.HttpContext;
+        return httpContext?.User?.Identity?.IsAuthenticated == true;
+    }
+
+    public bool IsInRole(string role)
+    {
+        var httpContext = _httpContextAccessor.HttpContext;
+        return httpContext?.User?.IsInRole(role) == true;
+    }
+
+    private async Task StoreTokenAsync(string token)
+    {
+        // Token will be stored in the authentication cookie
+        // This is handled in CreateAuthenticationCookieAsync
+        await Task.CompletedTask;
+    }
+
+    private async Task ClearTokenAsync()
+    {
+        // Token is cleared when the authentication cookie is removed
+        await Task.CompletedTask;
+    }
+
+    private async Task CreateAuthenticationCookieAsync(UserDto user)
+    {
+        var httpContext = _httpContextAccessor.HttpContext;
+        if (httpContext == null) return;
+
+        var claims = new List<Claim>
+        {
+            new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
+            new Claim(ClaimTypes.Name, user.Username),
+            new Claim(ClaimTypes.Email, user.Email),
+            new Claim(ClaimTypes.Role, user.Role.ToString()),
+            new Claim("FirstName", user.FirstName),
+            new Claim("LastName", user.LastName),
+            new Claim("UserData", JsonSerializer.Serialize(user))
+        };
+
+        var token = await GetTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+        {
+            claims.Add(new Claim("AccessToken", token));
+        }
+
+        var claimsIdentity = new ClaimsIdentity(claims, "Cookies");
+        var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
+
+        await httpContext.SignInAsync("Cookies", claimsPrincipal);
+    }
 }
 
 public class AdminAuthenticationStateProvider : AuthenticationStateProvider
 {
     private readonly AdminAuthService _authService;
-    private readonly ILogger<AdminAuthenticationStateProvider> _logger;
-    private ClaimsPrincipal _currentUser = new(new ClaimsIdentity());
 
-    public AdminAuthenticationStateProvider(AdminAuthService authService, ILogger<AdminAuthenticationStateProvider> logger)
+    public AdminAuthenticationStateProvider(AdminAuthService authService)
     {
         _authService = authService;
-        _logger = logger;
     }
 
-    public override Task<AuthenticationState> GetAuthenticationStateAsync()
+    public override async Task<AuthenticationState> GetAuthenticationStateAsync()
     {
-        return Task.FromResult(new AuthenticationState(_currentUser));
-    }
-
-    public Task MarkUserAsAuthenticated(string email, string role = "Admin")
-    {
-    _logger?.LogDebug("AdminAuthenticationStateProvider.MarkUserAsAuthenticated called for {Email}", email);
-        var identity = new ClaimsIdentity(new[]
+        if (_authService.IsAuthenticated())
         {
-            new Claim(ClaimTypes.Name, email),
-            new Claim(ClaimTypes.Email, email),
-            new Claim(ClaimTypes.Role, role),
-        }, "AdminAuth");
+            var user = await _authService.GetCurrentUserAsync();
+            if (user != null)
+            {
+                var claims = new[]
+                {
+                    new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
+                    new Claim(ClaimTypes.Name, user.Username),
+                    new Claim(ClaimTypes.Email, user.Email),
+                    new Claim(ClaimTypes.Role, user.Role.ToString())
+                };
 
-        _currentUser = new ClaimsPrincipal(identity);
-        NotifyAuthenticationStateChanged(Task.FromResult(new AuthenticationState(_currentUser)));
+                var identity = new ClaimsIdentity(claims, "Cookies");
+                var principal = new ClaimsPrincipal(identity);
+                return new AuthenticationState(principal);
+            }
+        }
 
-        return Task.CompletedTask;
+        return new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
     }
-
-    public Task MarkUserAsLoggedOut()
-    {
-        _currentUser = new ClaimsPrincipal(new ClaimsIdentity());
-        NotifyAuthenticationStateChanged(Task.FromResult(new AuthenticationState(_currentUser)));
-
-        return Task.CompletedTask;
-    }
-}
-
-public class LoginResult
-{
-    public bool Success { get; set; }
-    public string? ErrorMessage { get; set; }
 }

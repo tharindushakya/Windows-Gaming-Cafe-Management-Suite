@@ -5,6 +5,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using System.Text;
 using GamingCafe.Data;
 using GamingCafe.Data.Services;
+using System.Threading.RateLimiting;
 using GamingCafe.API.Services;
 using GamingCafe.API.Middleware;
 using GamingCafe.API.Hubs;
@@ -174,6 +175,21 @@ builder.Services.AddCors(options =>
 // Register IHttpContextAccessor and in-memory cache for middleware and services
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
+
+// Add a default/global rate limiter so app.UseRateLimiter() can operate without throwing
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "global", factory: _ =>
+            new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 200,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
+});
 
 // Configure Hangfire: prefer PostgreSQL persistent storage when a Hangfire connection string is provided
 var hangfireConnection = builder.Configuration.GetConnectionString("Hangfire") ?? builder.Configuration.GetConnectionString("DefaultConnection");

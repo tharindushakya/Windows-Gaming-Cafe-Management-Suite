@@ -1,86 +1,93 @@
-using Microsoft.AspNetCore.SignalR;
-
 namespace GamingCafe.Admin.Services;
 
 public class AdminNotificationService
 {
-    private readonly ILogger<AdminNotificationService> _logger;
-    private readonly List<AdminNotification> _notifications = new();
-    private static int _nextNotificationId = 1000;
+    private readonly List<NotificationMessage> _notifications = new();
+    private event Action? OnNotificationsChanged;
 
-    public AdminNotificationService(ILogger<AdminNotificationService> logger)
+    public IReadOnlyList<NotificationMessage> Notifications => _notifications.AsReadOnly();
+
+    public void AddNotification(string message, NotificationType type = NotificationType.Info, int? durationMs = 5000)
     {
-        _logger = logger;
-    }
-
-    public event Action<int>? OnNotificationAdded;
-
-    public Task AddNotificationAsync(string title, string message, NotificationType type = NotificationType.Info)
-    {
-        var timestamp = DateTime.UtcNow;
-        var notification = new AdminNotification
+        var notification = new NotificationMessage
         {
-            Id = System.Threading.Interlocked.Increment(ref _nextNotificationId),
-            Title = title,
+            Id = Guid.NewGuid(),
             Message = message,
             Type = type,
-            Timestamp = timestamp,
-            IsRead = false
+            Timestamp = DateTime.Now,
+            DurationMs = durationMs
         };
 
         _notifications.Add(notification);
-        _logger.LogInformation("Admin notification added (Id:{Id}) {Title} - {Message}", notification.Id, title, message);
+        OnNotificationsChanged?.Invoke();
 
-        try
+        // Auto-remove notification after duration
+        if (durationMs.HasValue)
         {
-            OnNotificationAdded?.Invoke(notification.Id);
+            Task.Delay(durationMs.Value).ContinueWith(_ => RemoveNotification(notification.Id));
         }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Error while invoking OnNotificationAdded event");
-        }
-
-        return Task.CompletedTask;
     }
 
-    public Task<int> GetUnreadCountAsync()
+    public void AddSuccess(string message, int? durationMs = 5000)
     {
-    var count = _notifications.Count(n => !n.IsRead);
-    _logger.LogDebug("AdminNotificationService.GetUnreadCountAsync -> {Count}", count);
-    return Task.FromResult(count);
+        AddNotification(message, NotificationType.Success, durationMs);
     }
 
-    public IReadOnlyList<AdminNotification> GetRecentNotifications(int count = 10)
+    public void AddError(string message, int? durationMs = 8000)
     {
-        return _notifications.OrderByDescending(n => n.Timestamp).Take(count).ToList();
+        AddNotification(message, NotificationType.Error, durationMs);
     }
 
-    public Task MarkAsReadAsync(int notificationId)
+    public void AddWarning(string message, int? durationMs = 6000)
     {
-        var notification = _notifications.FirstOrDefault(n => n.Id == notificationId);
+        AddNotification(message, NotificationType.Warning, durationMs);
+    }
+
+    public void AddInfo(string message, int? durationMs = 5000)
+    {
+        AddNotification(message, NotificationType.Info, durationMs);
+    }
+
+    // Convenience methods with more intuitive names
+    public void ShowSuccess(string message, int? durationMs = 5000) => AddSuccess(message, durationMs);
+    public void ShowError(string message, int? durationMs = 8000) => AddError(message, durationMs);
+    public void ShowWarning(string message, int? durationMs = 6000) => AddWarning(message, durationMs);
+    public void ShowInfo(string message, int? durationMs = 5000) => AddInfo(message, durationMs);
+
+    public void RemoveNotification(Guid id)
+    {
+        var notification = _notifications.FirstOrDefault(n => n.Id == id);
         if (notification != null)
         {
-            notification.IsRead = true;
-            _logger.LogInformation("Notification {Id} marked as read", notificationId);
+            _notifications.Remove(notification);
+            OnNotificationsChanged?.Invoke();
         }
-
-        return Task.CompletedTask;
     }
 
-    public void ClearNotifications()
+    public void ClearAll()
     {
         _notifications.Clear();
+        OnNotificationsChanged?.Invoke();
+    }
+
+    public void Subscribe(Action callback)
+    {
+        OnNotificationsChanged += callback;
+    }
+
+    public void Unsubscribe(Action callback)
+    {
+        OnNotificationsChanged -= callback;
     }
 }
 
-public class AdminNotification
+public class NotificationMessage
 {
-    public int Id { get; set; }
-    public string Title { get; set; } = string.Empty;
+    public Guid Id { get; set; }
     public string Message { get; set; } = string.Empty;
     public NotificationType Type { get; set; }
     public DateTime Timestamp { get; set; }
-    public bool IsRead { get; set; }
+    public int? DurationMs { get; set; }
 }
 
 public enum NotificationType
@@ -89,32 +96,4 @@ public enum NotificationType
     Success,
     Warning,
     Error
-}
-
-public class AdminHub : Hub
-{
-    private readonly ILogger<AdminHub> _logger;
-
-    public AdminHub(ILogger<AdminHub> logger)
-    {
-        _logger = logger;
-    }
-
-    public async Task JoinAdminGroup()
-    {
-        await Groups.AddToGroupAsync(Context.ConnectionId, "Admins");
-        _logger.LogInformation("Admin {ConnectionId} joined admin group", Context.ConnectionId);
-    }
-
-    public async Task LeaveAdminGroup()
-    {
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, "Admins");
-        _logger.LogInformation("Admin {ConnectionId} left admin group", Context.ConnectionId);
-    }
-
-    public override async Task OnDisconnectedAsync(Exception? exception)
-    {
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, "Admins");
-        await base.OnDisconnectedAsync(exception);
-    }
 }

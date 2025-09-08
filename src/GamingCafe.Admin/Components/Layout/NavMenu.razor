@@ -1,6 +1,10 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
+﻿@using GamingCafe.Admin.Services
+@inject AdminAuthService AuthService
+@inject NavigationManager Navigation
+
+<div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href=""><i class="fas fa-gamepad me-2"></i>Gaming Café Admin</a>
+        <a class="navbar-brand" href="">Gaming Café Admin</a>
     </div>
 </div>
 
@@ -9,52 +13,85 @@
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
     <nav class="nav flex-column">
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="dashboard" Match="NavLinkMatch.All">
-                <i class="fas fa-tachometer-alt me-2"></i> Dashboard
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Dashboard
             </NavLink>
         </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="stations">
-                <i class="fas fa-desktop me-2"></i> Stations
-            </NavLink>
-        </div>
+        @if (AuthService.IsAuthenticated())
+        {
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="users">
+                    <span class="bi bi-people-fill" aria-hidden="true"></span> Users
+                </NavLink>
+            </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="users">
-                <i class="fas fa-users me-2"></i> Users
-            </NavLink>
-        </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="stations">
+                    <span class="bi bi-pc-display" aria-hidden="true"></span> Stations
+                </NavLink>
+            </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="sessions">
-                <i class="fas fa-clock me-2"></i> Sessions
-            </NavLink>
-        </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="sessions">
+                    <span class="bi bi-controller" aria-hidden="true"></span> Sessions
+                </NavLink>
+            </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="pos">
-                <i class="fas fa-cash-register me-2"></i> POS
-            </NavLink>
-        </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="reservations">
+                    <span class="bi bi-calendar-check" aria-hidden="true"></span> Reservations
+                </NavLink>
+            </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="inventory">
-                <i class="fas fa-boxes me-2"></i> Inventory
-            </NavLink>
-        </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="products">
+                    <span class="bi bi-box-seam" aria-hidden="true"></span> Products
+                </NavLink>
+            </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="reports">
-                <i class="fas fa-chart-bar me-2"></i> Reports
-            </NavLink>
-        </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="inventory">
+                    <span class="bi bi-boxes" aria-hidden="true"></span> Inventory
+                </NavLink>
+            </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="consoles">
-                <i class="fas fa-gamepad me-2"></i> Consoles
-            </NavLink>
-        </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="reports">
+                    <span class="bi bi-graph-up" aria-hidden="true"></span> Reports
+                </NavLink>
+            </div>
+
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="consoles">
+                    <span class="bi bi-nintendo-switch" aria-hidden="true"></span> Consoles
+                </NavLink>
+            </div>
+
+            <hr class="my-3" />
+
+            <div class="nav-item px-3">
+                <button class="nav-link btn btn-link w-100 text-start" @onclick="HandleLogout">
+                    <span class="bi bi-box-arrow-right" aria-hidden="true"></span> Logout
+                </button>
+            </div>
+        }
+        else
+        {
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="login">
+                    <span class="bi bi-box-arrow-in-right" aria-hidden="true"></span> Login
+                </NavLink>
+            </div>
+        }
     </nav>
 </div>
+
+@code {
+    private async Task HandleLogout()
+    {
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/login");
+    }
+}
 

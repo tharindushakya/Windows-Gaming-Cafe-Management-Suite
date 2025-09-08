@@ -1,181 +1,180 @@
+using GamingCafe.Core.DTOs;
+using GamingCafe.Core.Models;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using GamingCafe.Core.DTOs;
-using GamingCafe.Core.Models;
 
 namespace GamingCafe.Admin.Services;
 
 public class AdminApiService
 {
     private readonly HttpClient _httpClient;
-    private readonly ILogger<AdminApiService> _logger;
-    private string? _accessToken;
-    private static readonly JsonSerializerOptions _jsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
+    private readonly IConfiguration _configuration;
+    private readonly AdminAuthService _authService;
+    private string? _baseUrl;
 
-    public AdminApiService(IHttpClientFactory httpClientFactory, ILogger<AdminApiService> logger)
+    public AdminApiService(HttpClient httpClient, IConfiguration configuration, AdminAuthService authService)
     {
-        _httpClient = httpClientFactory.CreateClient("API");
-        _logger = logger;
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _authService = authService;
+        _baseUrl = _configuration["ApiSettings:BaseUrl"] ?? "https://localhost:7001";
     }
 
-    public async Task<bool> AuthenticateAsync(string email, string password)
+    private async Task<bool> EnsureAuthenticatedAsync()
     {
-    _logger.LogDebug("AdminApiService.AuthenticateAsync called for {Email}", email);
+        var token = await _authService.GetTokenAsync();
+        if (string.IsNullOrEmpty(token))
+        {
+            return false;
+        }
+        
+        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return true;
+    }
+
+    private async Task<T?> GetAsync<T>(string endpoint)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return default;
+
         try
         {
-            var loginRequest = new LoginRequest
-            {
-                Email = email,
-                Password = password
-            };
-
-            var json = JsonSerializer.Serialize(loginRequest);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            var response = await _httpClient.PostAsync("/api/auth/login", content);
-
+            var response = await _httpClient.GetAsync($"{_baseUrl}/api/{endpoint}");
             if (response.IsSuccessStatusCode)
             {
-                var responseContent = await response.Content.ReadAsStringAsync();
-                var loginResponse = JsonSerializer.Deserialize<LoginResponse>(responseContent, _jsonOptions);
-
-                if (loginResponse != null && !string.IsNullOrEmpty(loginResponse.AccessToken))
+                var json = await response.Content.ReadAsStringAsync();
+                return JsonSerializer.Deserialize<T>(json, new JsonSerializerOptions
                 {
-                    _accessToken = loginResponse.AccessToken;
-                    _httpClient.DefaultRequestHeaders.Authorization = 
-                        new AuthenticationHeaderValue("Bearer", _accessToken);
-                    return true;
-                }
+                    PropertyNameCaseInsensitive = true
+                });
             }
-
-            return false;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during API authentication");
-            return false;
+            // Log exception
+            Console.WriteLine($"Error in GetAsync: {ex.Message}");
         }
+        
+        return default;
     }
 
-    public async Task<T?> GetAsync<T>(string endpoint) where T : class
+    private async Task<T?> PostAsync<T>(string endpoint, object data)
     {
-    _logger.LogDebug("AdminApiService.GetAsync called for endpoint {Endpoint}", endpoint);
-        try
-        {
-            var response = await _httpClient.GetAsync(endpoint);
-            if (response.IsSuccessStatusCode)
-            {
-                var content = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<T>(content, _jsonOptions);
-            }
-            return null;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting data from {Endpoint}", endpoint);
-            return null;
-        }
-    }
+        if (!await EnsureAuthenticatedAsync())
+            return default;
 
-    public async Task<TResponse?> PostAsync<TRequest, TResponse>(string endpoint, TRequest? data) 
-        where TResponse : class
-    {
-    _logger.LogDebug("AdminApiService.PostAsync called for endpoint {Endpoint} with data type {DataType}", endpoint, typeof(TRequest).Name);
-        try
-        {
-            if (data == null)
-            {
-                _logger.LogWarning("AdminApiService.PostAsync called with null data for {Endpoint}", endpoint);
-                return null;
-            }
-
-            var json = JsonSerializer.Serialize(data);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            var response = await _httpClient.PostAsync(endpoint, content);
-            if (response.IsSuccessStatusCode)
-            {
-                var responseContent = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<TResponse>(responseContent, _jsonOptions);
-            }
-            return null;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error posting data to {Endpoint}", endpoint);
-            return null;
-        }
-    }
-
-    public async Task<bool> PutAsync<T>(string endpoint, T data)
-    {
-    _logger.LogDebug("AdminApiService.PutAsync called for endpoint {Endpoint} with data type {DataType}", endpoint, typeof(T).Name);
         try
         {
             var json = JsonSerializer.Serialize(data);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            var response = await _httpClient.PutAsync(endpoint, content);
-            return response.IsSuccessStatusCode;
+            
+            var response = await _httpClient.PostAsync($"{_baseUrl}/api/{endpoint}", content);
+            if (response.IsSuccessStatusCode)
+            {
+                var responseJson = await response.Content.ReadAsStringAsync();
+                return JsonSerializer.Deserialize<T>(responseJson, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating data at {Endpoint}", endpoint);
-            return false;
+            Console.WriteLine($"Error in PostAsync: {ex.Message}");
         }
+        
+        return default;
     }
 
-    public async Task<bool> DeleteAsync(string endpoint)
+    private async Task<bool> PutAsync(string endpoint, object data)
     {
-    _logger.LogDebug("AdminApiService.DeleteAsync called for endpoint {Endpoint}", endpoint);
+        if (!await EnsureAuthenticatedAsync())
+            return false;
+
         try
         {
-            var response = await _httpClient.DeleteAsync(endpoint);
+            var json = JsonSerializer.Serialize(data);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            
+            var response = await _httpClient.PutAsync($"{_baseUrl}/api/{endpoint}", content);
             return response.IsSuccessStatusCode;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting data at {Endpoint}", endpoint);
-            return false;
+            Console.WriteLine($"Error in PutAsync: {ex.Message}");
         }
+        
+        return false;
     }
 
-    public void Logout()
+    private async Task<bool> DeleteAsync(string endpoint)
     {
-    _logger.LogDebug("AdminApiService.Logout called");
-        _accessToken = null;
-        _httpClient.DefaultRequestHeaders.Authorization = null;
+        if (!await EnsureAuthenticatedAsync())
+            return false;
+
+        try
+        {
+            var response = await _httpClient.DeleteAsync($"{_baseUrl}/api/{endpoint}");
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in DeleteAsync: {ex.Message}");
+        }
+        
+        return false;
     }
 
-    public bool IsAuthenticated => !string.IsNullOrEmpty(_accessToken);
+    // Users
+    public async Task<List<UserDto>?> GetUsersAsync() => await GetAsync<List<UserDto>>("users");
+    public async Task<UserDto?> GetUserAsync(int id) => await GetAsync<UserDto>($"users/{id}");
+    public async Task<UserDto?> CreateUserAsync(CreateUserRequest request) => await PostAsync<UserDto>("users", request);
+    public async Task<bool> UpdateUserAsync(int id, UpdateUserRequest request) => await PutAsync($"users/{id}", request);
+    public async Task<bool> DeleteUserAsync(int id) => await DeleteAsync($"users/{id}");
 
-    // ----- Product helpers (thin wrappers over generic methods) -----
-    public Task<List<Product>?> GetProductsAsync()
-    {
-        _logger.LogDebug("AdminApiService.GetProductsAsync");
-        return GetAsync<List<Product>>("/api/products");
-    }
+    // Game Stations
+    public async Task<List<GameStationDto>?> GetGameStationsAsync() => await GetAsync<List<GameStationDto>>("stations");
+    public async Task<GameStationDto?> GetGameStationAsync(int id) => await GetAsync<GameStationDto>($"stations/{id}");
+    public async Task<GameStationDto?> CreateGameStationAsync(GameStationDto station) => await PostAsync<GameStationDto>("stations", station);
+    public async Task<bool> UpdateGameStationAsync(int id, GameStationDto station) => await PutAsync($"stations/{id}", station);
+    public async Task<bool> DeleteGameStationAsync(int id) => await DeleteAsync($"stations/{id}");
 
-    public Task<Product?> CreateProductAsync(Product product)
-    {
-        _logger.LogDebug("AdminApiService.CreateProductAsync -> {name}", product?.Name);
-        return PostAsync<Product, Product>("/api/products", product);
-    }
+    // Game Sessions
+    public async Task<List<GameSessionDto>?> GetSessionsAsync() => await GetAsync<List<GameSessionDto>>("gamesessions");
+    public async Task<GameSessionDto?> GetSessionAsync(int id) => await GetAsync<GameSessionDto>($"gamesessions/{id}");
+    public async Task<bool> EndSessionAsync(int id) => await PostAsync<bool>($"gamesessions/{id}/end", new { });
 
-    public Task<bool> UpdateProductAsync(Product product)
-    {
-        if (product == null) return Task.FromResult(false);
-        _logger.LogDebug("AdminApiService.UpdateProductAsync -> {id}", product.ProductId);
-        return PutAsync($"/api/products/{product.ProductId}", product);
-    }
+    // Products
+    public async Task<List<ProductDto>?> GetProductsAsync() => await GetAsync<List<ProductDto>>("products");
+    public async Task<ProductDto?> GetProductAsync(int id) => await GetAsync<ProductDto>($"products/{id}");
+    public async Task<ProductDto?> CreateProductAsync(CreateProductRequest request) => await PostAsync<ProductDto>("products", request);
+    public async Task<bool> UpdateProductAsync(int id, UpdateProductRequest request) => await PutAsync($"products/{id}", request);
+    public async Task<bool> DeleteProductAsync(int id) => await DeleteAsync($"products/{id}");
 
-    public Task<bool> DeleteProductAsync(int productId)
-    {
-        _logger.LogDebug("AdminApiService.DeleteProductAsync -> {id}", productId);
-        return DeleteAsync($"/api/products/{productId}");
-    }
+    // Inventory
+    public async Task<List<InventoryMovementDto>?> GetInventoryMovementsAsync() => await GetAsync<List<InventoryMovementDto>>("inventory");
+    public async Task<InventoryMovementDto?> CreateInventoryMovementAsync(CreateInventoryMovementRequest request) => 
+        await PostAsync<InventoryMovementDto>("inventory", request);
+
+    // Reports
+    public async Task<DashboardStatsDto?> GetDashboardStatsAsync() => await GetAsync<DashboardStatsDto>("reports/dashboard");
+    public async Task<RevenueReportDto?> GetRevenueReportAsync(GetRevenueReportRequest request) => 
+        await PostAsync<RevenueReportDto>("reports/revenue", request);
+    public async Task<UsageReportDto?> GetUsageReportAsync(GetUsageReportRequest request) => 
+        await PostAsync<UsageReportDto>("reports/usage", request);
+
+    // Reservations
+    public async Task<List<ReservationDto>?> GetReservationsAsync() => await GetAsync<List<ReservationDto>>("reservations");
+    public async Task<ReservationDto?> GetReservationAsync(int id) => await GetAsync<ReservationDto>($"reservations/{id}");
+    public async Task<bool> UpdateReservationAsync(int id, UpdateReservationRequest request) => 
+        await PutAsync($"reservations/{id}", request);
+
+    // Consoles
+    public async Task<List<GameConsoleDto>?> GetConsolesAsync() => await GetAsync<List<GameConsoleDto>>("consoles");
+    public async Task<GameConsoleDto?> GetConsoleAsync(int id) => await GetAsync<GameConsoleDto>($"consoles/{id}");
+    public async Task<GameConsoleDto?> CreateConsoleAsync(CreateConsoleRequest request) => 
+        await PostAsync<GameConsoleDto>("consoles", request);
+    public async Task<bool> UpdateConsoleAsync(int id, UpdateConsoleRequest request) => 
+        await PutAsync($"consoles/{id}", request);
 }

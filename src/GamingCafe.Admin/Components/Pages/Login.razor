@@ -1,0 +1,138 @@
+@page "/login"
+@using GamingCafe.Core.DTOs
+@using GamingCafe.Admin.Services
+@inject AdminAuthService AuthService
+@inject AdminNotificationService NotificationService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Login - Gaming Café Admin</PageTitle>
+
+<div class="container-fluid vh-100">
+    <div class="row h-100 justify-content-center align-items-center">
+        <div class="col-md-6 col-lg-4">
+            <div class="card shadow">
+                <div class="card-body p-5">
+                    <div class="text-center mb-4">
+                        <h1 class="h3 mb-3 fw-normal">Gaming Café Admin</h1>
+                        <p class="text-muted">Sign in to your account</p>
+                    </div>
+
+                    <EditForm Model="@loginRequest" OnValidSubmit="@HandleLogin" FormName="LoginForm">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger mb-3" />
+
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <InputText @bind-Value="loginRequest.Email" 
+                                      class="form-control" 
+                                      id="email" 
+                                      placeholder="Enter your email" 
+                                      disabled="@isLoading" />
+                            <ValidationMessage For="@(() => loginRequest.Email)" class="text-danger" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password</label>
+                            <InputText @bind-Value="loginRequest.Password" 
+                                      type="password" 
+                                      class="form-control" 
+                                      id="password" 
+                                      placeholder="Enter your password" 
+                                      disabled="@isLoading" />
+                            <ValidationMessage For="@(() => loginRequest.Password)" class="text-danger" />
+                        </div>
+
+                        @if (requiresTwoFactor)
+                        {
+                            <div class="mb-3">
+                                <label for="twoFactorCode" class="form-label">Two-Factor Code</label>
+                                <InputText @bind-Value="loginRequest.TwoFactorCode" 
+                                          class="form-control" 
+                                          id="twoFactorCode" 
+                                          placeholder="Enter 6-digit code" 
+                                          maxlength="6"
+                                          disabled="@isLoading" />
+                                <ValidationMessage For="@(() => loginRequest.TwoFactorCode)" class="text-danger" />
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(errorMessage))
+                        {
+                            <div class="alert alert-danger">
+                                @errorMessage
+                            </div>
+                        }
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary" disabled="@isLoading">
+                                @if (isLoading)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                }
+                                Sign In
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private LoginRequest loginRequest = new();
+    private bool isLoading = false;
+    private bool requiresTwoFactor = false;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Redirect if already authenticated
+        if (AuthService.IsAuthenticated())
+        {
+            Navigation.NavigateTo("/");
+        }
+    }
+
+    private async Task HandleLogin()
+    {
+        isLoading = true;
+        errorMessage = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            var result = await AuthService.LoginAsync(loginRequest);
+            
+            if (result != null)
+            {
+                if (result.RequiresTwoFactor)
+                {
+                    requiresTwoFactor = true;
+                    loginRequest.TwoFactorToken = result.TwoFactorToken;
+                    NotificationService.AddInfo("Please enter your two-factor authentication code.");
+                }
+                else
+                {
+                    NotificationService.AddSuccess("Login successful!");
+                    Navigation.NavigateTo("/");
+                }
+            }
+            else
+            {
+                errorMessage = "Invalid email or password.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "An error occurred during login. Please try again.";
+            Console.WriteLine($"Login error: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+}
