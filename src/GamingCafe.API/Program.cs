@@ -257,8 +257,20 @@ builder.Services.AddScoped<IBackupService, BackupService>();
 builder.Services.AddScoped<DatabaseSeeder>();
 
 // Background task queue and hosted worker for reliable fire-and-forget work (emails, verification, etc.)
-builder.Services.AddSingleton<GamingCafe.Core.Interfaces.Background.IBackgroundTaskQueue, GamingCafe.API.Background.BackgroundTaskQueue>();
+var queueCapacity = builder.Configuration.GetValue<int?>("BackgroundQueue:Capacity") ?? 1000;
+builder.Services.AddSingleton<GamingCafe.Core.Interfaces.Background.IBackgroundTaskQueue>(sp =>
+{
+    var logger = sp.GetRequiredService<ILogger<GamingCafe.API.Background.BackgroundTaskQueue>>();
+    return new GamingCafe.API.Background.BackgroundTaskQueue(logger, queueCapacity);
+});
 builder.Services.AddHostedService<GamingCafe.API.Background.QueuedHostedService>();
+
+// Optional persistent scheduled job store (hybrid scheduling): register if EF DbContext is available and enabled in config
+var enablePersistentScheduling = builder.Configuration.GetValue<bool?>("BackgroundQueue:PersistentSchedulingEnabled") ?? false;
+if (enablePersistentScheduling)
+{
+    builder.Services.AddScoped<GamingCafe.Core.Interfaces.Background.IScheduledJobStore, GamingCafe.Data.Repositories.ScheduledJobStore>();
+}
 
 // Respect X-Forwarded-* headers when behind a proxy/load balancer so RemoteIpAddress reflects client IP
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -369,6 +381,30 @@ app.MapGet("/metrics", () =>
     sb.AppendLine("# HELP gamingcafe_rate_limit_rejected Number of requests rejected by rate limiter");
     sb.AppendLine("# TYPE gamingcafe_rate_limit_rejected counter");
     sb.AppendLine($"gamingcafe_rate_limit_rejected {rejected}");
+    // Background queue metrics
+    try
+    {
+        var queue = app.Services.GetService<GamingCafe.Core.Interfaces.Background.IBackgroundTaskQueue>();
+        if (queue != null)
+        {
+            var lens = queue.GetQueueLengths();
+            sb.AppendLine("# HELP gamingcafe_background_queue_high_length Approximate number of items in high priority queue");
+            sb.AppendLine("# TYPE gamingcafe_background_queue_high_length gauge");
+            sb.AppendLine($"gamingcafe_background_queue_high_length {lens.High}");
+            sb.AppendLine("# HELP gamingcafe_background_queue_normal_length Approximate number of items in normal priority queue");
+            sb.AppendLine("# TYPE gamingcafe_background_queue_normal_length gauge");
+            sb.AppendLine($"gamingcafe_background_queue_normal_length {lens.Normal}");
+            sb.AppendLine("# HELP gamingcafe_background_queue_low_length Approximate number of items in low priority queue");
+            sb.AppendLine("# TYPE gamingcafe_background_queue_low_length gauge");
+            sb.AppendLine($"gamingcafe_background_queue_low_length {lens.Low}");
+
+            var failures = queue.GetFailureCount();
+            sb.AppendLine("# HELP gamingcafe_background_task_failures Total background task failures since process start");
+            sb.AppendLine("# TYPE gamingcafe_background_task_failures counter");
+            sb.AppendLine($"gamingcafe_background_task_failures {failures}");
+        }
+    }
+    catch { }
     return Results.Text(sb.ToString(), "text/plain; version=0.0.4");
 });
 

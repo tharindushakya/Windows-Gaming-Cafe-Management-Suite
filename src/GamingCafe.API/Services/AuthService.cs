@@ -38,14 +38,73 @@ public class AuthService : IAuthService
     private readonly IServiceProvider _serviceProvider;
     private readonly IBackgroundTaskQueue? _taskQueue;
     private readonly Microsoft.Extensions.Caching.Memory.IMemoryCache _cache;
+    private readonly Microsoft.Extensions.Caching.Distributed.IDistributedCache? _distributedCache;
 
-    public AuthService(GamingCafeContext context, IConfiguration configuration, IServiceProvider serviceProvider, Microsoft.Extensions.Caching.Memory.IMemoryCache cache, IBackgroundTaskQueue? taskQueue = null)
+    public AuthService(GamingCafeContext context, IConfiguration configuration, IServiceProvider serviceProvider, Microsoft.Extensions.Caching.Memory.IMemoryCache cache, Microsoft.Extensions.Caching.Distributed.IDistributedCache? distributedCache = null, IBackgroundTaskQueue? taskQueue = null)
     {
         _context = context;
         _configuration = configuration;
         _serviceProvider = serviceProvider;
         _cache = cache;
+        _distributedCache = distributedCache;
         _taskQueue = taskQueue;
+    }
+
+    private async Task SetTwoFactorTokenAsync(string token, int userId, TimeSpan ttl)
+    {
+        var key = $"2fa:{token}";
+        if (_distributedCache != null)
+        {
+            var bytes = BitConverter.GetBytes(userId);
+            var options = new Microsoft.Extensions.Caching.Distributed.DistributedCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = ttl
+            };
+            await _distributedCache.SetAsync(key, bytes, options);
+            return;
+        }
+
+        // fallback to memory cache
+        using (var entry = _cache.CreateEntry(key))
+        {
+            entry.Value = userId;
+            entry.AbsoluteExpirationRelativeToNow = ttl;
+        }
+    }
+
+    private async Task<int?> TryGetTwoFactorUserIdAsync(string token)
+    {
+        var key = $"2fa:{token}";
+        if (_distributedCache != null)
+        {
+            try
+            {
+                var bytes = await _distributedCache.GetAsync(key);
+                if (bytes == null || bytes.Length == 0) return null;
+                return BitConverter.ToInt32(bytes, 0);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        if (_cache.TryGetValue(key, out var obj) && obj is int id)
+            return id;
+
+        return null;
+    }
+
+    private async Task RemoveTwoFactorTokenAsync(string token)
+    {
+        var key = $"2fa:{token}";
+        if (_distributedCache != null)
+        {
+            await _distributedCache.RemoveAsync(key);
+            return;
+        }
+
+        _cache.Remove(key);
     }
 
     public async Task<LoginResponse?> AuthenticateAsync(LoginRequest request)
@@ -64,13 +123,8 @@ public class AuthService : IAuthService
             {
                 var twoFactorToken = GenerateSecureToken();
                 // Store the 2FA token in an in-memory cache with a short TTL
-                // Fallback to CreateEntry to avoid extension method resolution issues
-                var cacheKey = $"2fa:{twoFactorToken}";
-                using (var entry = _cache.CreateEntry(cacheKey))
-                {
-                    entry.Value = user.UserId;
-                    entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
-                }
+                // Prefer distributed cache (Redis) for multi-instance resilience; fall back to in-memory cache.
+                await SetTwoFactorTokenAsync(twoFactorToken, user.UserId, TimeSpan.FromMinutes(5));
 
                 return new LoginResponse
                 {
@@ -92,8 +146,8 @@ public class AuthService : IAuthService
             }
 
             // When a code is provided, require a valid transient two-factor token as proof this flow was initiated
-            object? cachedObj;
-            if (string.IsNullOrEmpty(request.TwoFactorToken) || !_cache.TryGetValue($"2fa:{request.TwoFactorToken}", out cachedObj) || !(cachedObj is int cachedUserId) || cachedUserId != user.UserId)
+            int? cachedUserId = null;
+            if (string.IsNullOrEmpty(request.TwoFactorToken) || (cachedUserId = await TryGetTwoFactorUserIdAsync(request.TwoFactorToken)) == null || cachedUserId != user.UserId)
             {
                 // Token missing/expired or mismatch
                 return null;
@@ -116,7 +170,7 @@ public class AuthService : IAuthService
                 return null;
 
             // Remove transient token after successful verification
-            _cache.Remove($"2fa:{request.TwoFactorToken}");
+            await RemoveTwoFactorTokenAsync(request.TwoFactorToken!);
         }
 
         var accessToken = GenerateJwtToken(user);

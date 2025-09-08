@@ -40,6 +40,9 @@ public class GamingCafeContext : DbContext
       // Refresh tokens
       public DbSet<GamingCafe.Core.Models.RefreshToken> RefreshTokens { get; set; }
 
+      // Scheduled jobs for optional persistent scheduling
+      public DbSet<GamingCafe.Core.Models.ScheduledJob> ScheduledJobs { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         base.OnConfiguring(optionsBuilder);
@@ -383,6 +386,17 @@ public class GamingCafeContext : DbContext
                   entity.HasIndex(e => e.TokenHash).IsUnique();
                   entity.HasIndex(e => e.UserId);
             });
+
+                  // ScheduledJob Configuration
+                  modelBuilder.Entity<GamingCafe.Core.Models.ScheduledJob>(entity =>
+                  {
+                        entity.HasKey(e => e.JobId);
+                        entity.Property(e => e.PayloadType).HasMaxLength(200);
+                        entity.Property(e => e.CreatedAt).IsRequired();
+                        entity.Property(e => e.ScheduledAt).IsRequired();
+                        entity.Property(e => e.Processed).IsRequired();
+                        entity.HasIndex(e => e.ScheduledAt);
+                  });
 
         // Seed Data
         SeedData(modelBuilder);
