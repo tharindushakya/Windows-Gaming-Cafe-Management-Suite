@@ -13,6 +13,7 @@ using GamingCafe.API.Hubs;
 using Hangfire;
 using Hangfire.PostgreSql;
 using GamingCafe.API.Filters;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using System.Security.Cryptography.X509Certificates;
 using System.Runtime.InteropServices;
@@ -223,8 +224,25 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-// Add Authorization
-builder.Services.AddAuthorization();
+// Add Authorization and register named policies for policy-based authorization
+builder.Services.AddAuthorization(options =>
+{
+    // Simple role-based policy for administrators
+    options.AddPolicy("RequireAdmin", policy => policy.RequireRole("Admin"));
+
+    // Manager or Admin can be used for mid-level operations
+    options.AddPolicy("RequireManagerOrAdmin", policy => policy.RequireAssertion(context =>
+        context.User.IsInRole("Admin") || context.User.IsInRole("Manager")
+    ));
+
+    // Scope/claim based policy example for station management operations
+    options.AddPolicy("RequireStationScope", policy => policy.RequireClaim("scope", "stations.manage"));
+    // Owner-or-admin policy uses an IAuthorizationHandler registered below
+    options.AddPolicy("RequireOwnerOrAdmin", policy => policy.AddRequirements(new GamingCafe.API.Authorization.OwnershipRequirement()));
+});
+
+// Register authorization handlers
+builder.Services.AddSingleton<IAuthorizationHandler, GamingCafe.API.Authorization.OwnershipHandler>();
 
 // Configure FluentValidation - use automatic MVC integration and register validators from this assembly
 builder.Services.AddFluentValidationAutoValidation();

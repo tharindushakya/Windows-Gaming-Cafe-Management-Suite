@@ -3,12 +3,13 @@ using Microsoft.AspNetCore.Mvc;
 using GamingCafe.Core.Interfaces.Services;
 using GamingCafe.Core.DTOs;
 using System.ComponentModel.DataAnnotations;
+using GamingCafe.Core.Authorization;
 
 namespace GamingCafe.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Admin")]
+[Authorize(Policy = PolicyNames.RequireAdmin)]
 public class BackupController : ControllerBase
 {
     private readonly IBackupService _backupService;
