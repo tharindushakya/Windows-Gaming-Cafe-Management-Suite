@@ -74,6 +74,11 @@
                             </button>
                         </div>
                     </EditForm>
+
+                    <div class="d-flex justify-content-between mt-3">
+                        <a href="/forgot-password" class="text-muted">Forgot Password?</a>
+                        <a href="/register" class="text-muted">Register</a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -134,5 +139,17 @@
             isLoading = false;
             StateHasChanged();
         }
+    }
+
+    private async Task HandleForgotPassword()
+    {
+        // Navigate to Forgot Password page
+        Navigation.NavigateTo("/forgot-password");
+    }
+
+    private async Task HandleRegister()
+    {
+        // Navigate to Register page
+        Navigation.NavigateTo("/register");
     }
 }

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -157,6 +158,36 @@ public class AdminAuthService
 
         await httpContext.SignInAsync("Cookies", claimsPrincipal);
     }
+
+    public async Task<bool> ForgotPasswordAsync(string email)
+    {
+        try
+        {
+            var content = new StringContent(JsonSerializer.Serialize(new { Email = email }), Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync($"{_baseUrl}/api/auth/forgot-password", content);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Forgot Password error: {ex.Message}");
+            return false;
+        }
+    }
+
+    public async Task<bool> RegisterAsync(RegisterRequest request)
+    {
+        try
+        {
+            var content = new StringContent(JsonSerializer.Serialize(request), Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync($"{_baseUrl}/api/auth/register", content);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Register error: {ex.Message}");
+            return false;
+        }
+    }
 }
 
 public class AdminAuthenticationStateProvider : AuthenticationStateProvider
@@ -175,17 +206,21 @@ public class AdminAuthenticationStateProvider : AuthenticationStateProvider
             var user = await _authService.GetCurrentUserAsync();
             if (user != null)
             {
-                var claims = new[]
+                var claims = new List<Claim>
                 {
                     new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
                     new Claim(ClaimTypes.Name, user.Username),
                     new Claim(ClaimTypes.Email, user.Email),
-                    new Claim(ClaimTypes.Role, user.Role.ToString())
+                    new Claim(ClaimTypes.Role, user.Role.ToString()),
+                    new Claim("FirstName", user.FirstName),
+                    new Claim("LastName", user.LastName),
+                    new Claim("UserData", JsonSerializer.Serialize(user))
                 };
 
-                var identity = new ClaimsIdentity(claims, "Cookies");
-                var principal = new ClaimsPrincipal(identity);
-                return new AuthenticationState(principal);
+                var claimsIdentity = new ClaimsIdentity(claims, "Cookies");
+                var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
+
+                return new AuthenticationState(claimsPrincipal);
             }
         }
 
