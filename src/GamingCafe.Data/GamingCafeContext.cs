@@ -37,6 +37,8 @@ public class GamingCafeContext : DbContext
 
     // Audit Logging
     public DbSet<AuditLog> AuditLogs { get; set; }
+      // Refresh tokens
+      public DbSet<GamingCafe.Core.Models.RefreshToken> RefreshTokens { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -364,6 +366,23 @@ public class GamingCafeContext : DbContext
             entity.HasIndex(e => e.Timestamp);
             entity.HasIndex(e => new { e.EntityType, e.EntityId });
         });
+
+            // RefreshToken Configuration
+            modelBuilder.Entity<GamingCafe.Core.Models.RefreshToken>(entity =>
+            {
+                  entity.HasKey(e => e.TokenId);
+                  entity.Property(e => e.TokenHash).IsRequired();
+                  entity.Property(e => e.DeviceInfo).HasMaxLength(200);
+                  entity.Property(e => e.IpAddress).HasMaxLength(45);
+
+                  entity.HasOne(e => e.User)
+                          .WithMany(u => u.RefreshTokens)
+                          .HasForeignKey(e => e.UserId)
+                          .OnDelete(DeleteBehavior.Cascade);
+
+                  entity.HasIndex(e => e.TokenHash).IsUnique();
+                  entity.HasIndex(e => e.UserId);
+            });
 
         // Seed Data
         SeedData(modelBuilder);

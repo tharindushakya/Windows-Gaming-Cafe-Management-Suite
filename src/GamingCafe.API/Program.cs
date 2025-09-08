@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using System.Text;
+using Microsoft.AspNetCore.HttpOverrides;
 using GamingCafe.Data;
 using GamingCafe.Data.Services;
 using System.Threading.RateLimiting;
@@ -56,34 +57,32 @@ builder.Services.AddApiVersioning(options =>
 builder.Services.AddDbContext<GamingCafeContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Configure Redis Cache
+// Configure Redis Cache - register only when a connection can be established
 try
 {
+    var redisConfig = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
+    // Add distributed cache config (this may still throw if configuration is invalid)
     builder.Services.AddStackExchangeRedisCache(options =>
     {
-        options.Configuration = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
+        options.Configuration = redisConfig;
         options.InstanceName = "GamingCafe";
     });
 
-    // Register Redis ConnectionMultiplexer for advanced operations
-    builder.Services.AddSingleton<IConnectionMultiplexer>(provider =>
+    // Attempt to establish a ConnectionMultiplexer at startup. If it fails, do not register a multiplexer
+    try
     {
-        try
-        {
-            var connectionString = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
-            return ConnectionMultiplexer.Connect(connectionString);
-        }
-        catch (Exception ex)
-        {
-            var logger = provider.GetService<ILogger<Program>>();
-            logger?.LogWarning(ex, "Failed to connect to Redis at startup. Cache will fall back to in-memory.");
-            return null!; // Return null, CacheService will handle gracefully
-        }
-    });
+        var connection = ConnectionMultiplexer.Connect(redisConfig);
+        builder.Services.AddSingleton<IConnectionMultiplexer>(connection);
+    }
+    catch (Exception ex)
+    {
+        var logger = LoggerFactory.Create(b => b.AddConsole()).CreateLogger<Program>();
+        logger.LogWarning(ex, "Failed to connect to Redis at startup. Skipping ConnectionMultiplexer registration; application will fall back to in-memory cache behavior where implemented.");
+    }
 }
 catch (Exception ex)
 {
-    // If Redis setup fails completely, log and continue without Redis
+    // If Redis setup fails completely (invalid configuration), log and continue without Redis
     var logger = LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<Program>();
     logger.LogWarning(ex, "Redis setup failed. Application will run without Redis cache.");
 }
@@ -210,7 +209,8 @@ if (!string.IsNullOrEmpty(hangfireConnection) && usePostgresHangfire)
 
         if (hasTables)
         {
-            builder.Services.AddHangfire(config => config.UsePostgreSqlStorage(hangfireConnection, new Hangfire.PostgreSql.PostgreSqlStorageOptions
+            // Use the newer overload to avoid obsolete API
+            builder.Services.AddHangfire(config => config.UsePostgreSqlStorage(_ => { }, new Hangfire.PostgreSql.PostgreSqlStorageOptions
             {
                 SchemaName = hangfireSchema,
                 PrepareSchemaIfNecessary = false
@@ -263,17 +263,13 @@ builder.Services.AddScoped<DatabaseSeeder>();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 
-// Add Swagger and dynamically create a Swagger document for each discovered API version
-builder.Services.AddSwaggerGen(options =>
-{
-    // Basic settings; detailed per-version docs will be registered below using the API explorer
-    options.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
-});
-
-// Register Swagger with a default v1 document (basic versioning support visible in Swagger)
+// Add Swagger with a single consolidated registration.
 builder.Services.AddSwaggerGen(opts =>
 {
+    // Register a default v1 document
     opts.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo { Title = "GamingCafe API v1", Version = "v1" });
+
+    // Resolve conflicting actions by taking the first description (keeps behavior from before but avoids double-registration)
     opts.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
 });
 
@@ -281,6 +277,18 @@ builder.Services.AddSwaggerGen(opts =>
 // A simple /metrics endpoint is exposed later in this file for basic Prometheus-style scraping.
 
 var app = builder.Build();
+
+// Respect X-Forwarded-* headers when behind a proxy/load balancer so RemoteIpAddress reflects client IP
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // Clear known networks/proxies so middleware will accept headers from any trusted reverse proxy configured externally.
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+// Use forwarded headers middleware early so downstream middleware (rate limiter, logging) sees the correct client IP
+app.UseForwardedHeaders();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

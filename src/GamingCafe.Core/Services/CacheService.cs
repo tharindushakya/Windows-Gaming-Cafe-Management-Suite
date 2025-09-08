@@ -83,13 +83,28 @@ public class CacheService : ICacheService
         {
             if (_redis != null)
             {
-                var database = _redis.GetDatabase();
-                var server = _redis.GetServer(_redis.GetEndPoints().First());
-                var keys = server.Keys(pattern: pattern);
-                
-                foreach (var key in keys)
+                try
                 {
-                    await database.KeyDeleteAsync(key);
+                    var database = _redis.GetDatabase();
+                    var endpoints = _redis.GetEndPoints();
+                    if (endpoints != null && endpoints.Any())
+                    {
+                        var server = _redis.GetServer(endpoints.First());
+                        var keys = server.Keys(pattern: pattern);
+
+                        foreach (var key in keys)
+                        {
+                            await database.KeyDeleteAsync(key);
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("No Redis endpoints available for pattern removal: {Pattern}", pattern);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error while attempting to remove keys by pattern using Redis; falling back to no-op: {Pattern}", pattern);
                 }
             }
             else
@@ -123,8 +138,23 @@ public class CacheService : ICacheService
         {
             if (_redis != null)
             {
-                var server = _redis.GetServer(_redis.GetEndPoints().First());
-                await server.FlushDatabaseAsync();
+                try
+                {
+                    var endpoints = _redis.GetEndPoints();
+                    if (endpoints != null && endpoints.Any())
+                    {
+                        var server = _redis.GetServer(endpoints.First());
+                        await server.FlushDatabaseAsync();
+                    }
+                    else
+                    {
+                        _logger.LogWarning("No Redis endpoints available for FlushDatabase");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to flush Redis database; continuing");
+                }
             }
             else
             {

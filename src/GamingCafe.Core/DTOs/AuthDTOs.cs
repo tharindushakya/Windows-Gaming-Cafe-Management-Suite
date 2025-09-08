@@ -10,6 +10,9 @@ public class LoginRequest
     public string? RecoveryCode { get; set; }
     // Token returned by server when 2FA is required to complete login
     public string? TwoFactorToken { get; set; }
+    // Optional client metadata
+    public string? IpAddress { get; set; }
+    public string? DeviceInfo { get; set; }
 }
 
 public class LoginResponse
@@ -26,6 +29,9 @@ public class RefreshTokenRequest
 {
     public string AccessToken { get; set; } = string.Empty;
     public string RefreshToken { get; set; } = string.Empty;
+    // Optional client metadata
+    public string? IpAddress { get; set; }
+    public string? DeviceInfo { get; set; }
 }
 
 public class RefreshTokenResponse

@@ -117,21 +117,32 @@ public class AuthService : IAuthService
         }
 
         var accessToken = GenerateJwtToken(user);
-        var refreshToken = GenerateRefreshToken();
+        var rawRefreshToken = GenerateRefreshToken();
 
-        user.RefreshToken = refreshToken;
-        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7); // 7 days
+        // Persist only a hash of the refresh token
+        var refreshTokenHash = ComputeHash(rawRefreshToken);
+
+        var refreshTokenEntity = new GamingCafe.Core.Models.RefreshToken
+        {
+            UserId = user.UserId,
+            TokenHash = refreshTokenHash,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            IpAddress = request.IpAddress ?? null,
+            DeviceInfo = request.DeviceInfo ?? null
+        };
+
+        _context.RefreshTokens.Add(refreshTokenEntity);
         user.LastLoginAt = DateTime.UtcNow;
         // Clear temporary 2FA token
         user.EmailVerificationToken = null;
         user.EmailVerificationTokenExpiry = null;
 
-        await _context.SaveChangesAsync();
+    await _context.SaveChangesAsync();
 
         return new LoginResponse
         {
             AccessToken = accessToken,
-            RefreshToken = refreshToken,
+            RefreshToken = rawRefreshToken,
             ExpiresAt = DateTime.UtcNow.AddMinutes(15), // JWT expires in 15 minutes
             RequiresTwoFactor = false,
                 User = new UserDto
@@ -159,23 +170,47 @@ public class AuthService : IAuthService
         if (!int.TryParse(userIdClaim, out int userId))
             return null;
 
-        var user = await _context.Users.FindAsync(userId);
-        if (user == null || user.RefreshToken != request.RefreshToken || 
-            user.RefreshTokenExpiryTime <= DateTime.UtcNow)
+        var user = await _context.Users.Include(u => u.RefreshTokens).FirstOrDefaultAsync(u => u.UserId == userId);
+        if (user == null)
             return null;
 
-        var newAccessToken = GenerateJwtToken(user);
-        var newRefreshToken = GenerateRefreshToken();
+        var incomingHash = ComputeHash(request.RefreshToken);
 
-        user.RefreshToken = newRefreshToken;
-        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
+        var tokenEntity = await _context.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == incomingHash);
+        if (tokenEntity == null || tokenEntity.RevokedAt != null || tokenEntity.ExpiresAt <= DateTime.UtcNow)
+        {
+            // Possible token reuse or invalid token. Revoke all user's tokens as a precaution.
+            var userTokens = _context.RefreshTokens.Where(t => t.UserId == user.UserId && t.RevokedAt == null);
+            await userTokens.ForEachAsync(t => t.RevokedAt = DateTime.UtcNow);
+            await _context.SaveChangesAsync();
+            return null;
+        }
 
+        // Rotation: create a new token and mark the old as replaced/revoked
+        var newRawToken = GenerateRefreshToken();
+        var newHash = ComputeHash(newRawToken);
+
+        var newTokenEntity = new GamingCafe.Core.Models.RefreshToken
+        {
+            UserId = user.UserId,
+            TokenHash = newHash,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            IpAddress = request.IpAddress ?? tokenEntity.IpAddress,
+            DeviceInfo = request.DeviceInfo ?? tokenEntity.DeviceInfo
+        };
+
+        tokenEntity.RevokedAt = DateTime.UtcNow;
+        tokenEntity.ReplacedByTokenId = newTokenEntity.TokenId;
+
+        _context.RefreshTokens.Add(newTokenEntity);
         await _context.SaveChangesAsync();
+
+        var newAccessToken = GenerateJwtToken(user);
 
         return new RefreshTokenResponse
         {
             AccessToken = newAccessToken,
-            RefreshToken = newRefreshToken,
+            RefreshToken = newRawToken,
             ExpiresAt = DateTime.UtcNow.AddMinutes(15)
         };
     }
@@ -221,10 +256,13 @@ public class AuthService : IAuthService
         if (user == null)
             return false;
 
-        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-        user.PasswordResetToken = null;
-        user.PasswordResetTokenExpiry = null;
-        user.RefreshToken = null; // Invalidate all refresh tokens
+    user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+    user.PasswordResetToken = null;
+    user.PasswordResetTokenExpiry = null;
+
+    // Invalidate all existing refresh tokens for the user
+    var userTokens = _context.RefreshTokens.Where(t => t.UserId == user.UserId && t.RevokedAt == null);
+    await userTokens.ForEachAsync(t => t.RevokedAt = DateTime.UtcNow);
 
         await _context.SaveChangesAsync();
         return true;
@@ -269,15 +307,12 @@ public class AuthService : IAuthService
 
     public async Task<bool> RevokeRefreshTokenAsync(string refreshToken)
     {
-        var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.RefreshToken == refreshToken);
-
-        if (user == null)
+        var hash = ComputeHash(refreshToken);
+        var token = await _context.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash);
+        if (token == null)
             return false;
 
-        user.RefreshToken = null;
-        user.RefreshTokenExpiryTime = null;
-
+        token.RevokedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
         return true;
     }
@@ -431,5 +466,17 @@ public class AuthService : IAuthService
         {
             return null;
         }
+    }
+
+    private string ComputeHash(string token)
+    {
+        var key = _configuration["RefreshToken:HashKey"] ?? _configuration["Jwt:Key"];
+        if (string.IsNullOrEmpty(key))
+            throw new InvalidOperationException("Refresh token hash key is not configured");
+
+        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(key));
+        var bytes = Encoding.UTF8.GetBytes(token);
+        var hash = hmac.ComputeHash(bytes);
+        return Convert.ToBase64String(hash);
     }
 }

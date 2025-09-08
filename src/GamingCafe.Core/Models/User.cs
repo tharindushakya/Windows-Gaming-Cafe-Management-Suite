@@ -33,9 +33,7 @@ public class User
     public bool IsActive { get; set; } = true;
     public UserRole Role { get; set; } = UserRole.Customer;
 
-    // Security tokens
-    public string? RefreshToken { get; set; }
-    public DateTime? RefreshTokenExpiryTime { get; set; }
+    // Security tokens (moved to per-session RefreshToken entity)
     public string? PasswordResetToken { get; set; }
     public DateTime? PasswordResetTokenExpiry { get; set; }
     
@@ -66,6 +64,9 @@ public class User
     // Concurrency token for optimistic concurrency control when updating security-sensitive fields
     [Timestamp]
     public byte[]? RowVersion { get; set; }
+
+    // Per-device/session refresh tokens
+    public virtual ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
 }
 
 public enum UserRole
