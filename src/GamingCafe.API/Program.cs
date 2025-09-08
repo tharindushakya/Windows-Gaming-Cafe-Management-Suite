@@ -256,6 +256,10 @@ builder.Services.AddScoped<IBackupService, BackupService>();
 // Database seeder
 builder.Services.AddScoped<DatabaseSeeder>();
 
+// Background task queue and hosted worker for reliable fire-and-forget work (emails, verification, etc.)
+builder.Services.AddSingleton<GamingCafe.Core.Interfaces.Background.IBackgroundTaskQueue, GamingCafe.API.Background.BackgroundTaskQueue>();
+builder.Services.AddHostedService<GamingCafe.API.Background.QueuedHostedService>();
+
 // Respect X-Forwarded-* headers when behind a proxy/load balancer so RemoteIpAddress reflects client IP
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {

@@ -5,6 +5,7 @@ using System.Net;
 using System.Text.RegularExpressions;
 using System.Text;
 using GamingCafe.Core.Interfaces.Services;
+using GamingCafe.Core.Interfaces.Background;
 using GamingCafe.Core.Models.Email;
 
 namespace GamingCafe.Core.Services;
@@ -18,18 +19,20 @@ public class EmailService : IEmailService
     private readonly ILogger<EmailService> _logger;
     private readonly SmtpConfiguration _smtpConfig;
     private readonly SemaphoreSlim _rateLimitSemaphore;
+    private readonly IBackgroundTaskQueue? _taskQueue;
     private readonly Dictionary<string, EmailTemplate> _templates;
     private readonly List<EmailResult> _emailHistory;
     private readonly object _historyLock = new();
     private static readonly Regex EmailRegex = new(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.Compiled);
 
-    public EmailService(IConfiguration configuration, ILogger<EmailService> logger)
+    public EmailService(IConfiguration configuration, ILogger<EmailService> logger, IBackgroundTaskQueue? taskQueue = null)
     {
         _logger = logger;
         _smtpConfig = LoadSmtpConfiguration(configuration);
         _rateLimitSemaphore = new SemaphoreSlim(_smtpConfig.MaxConnections, _smtpConfig.MaxConnections);
         _templates = LoadDefaultTemplates();
         _emailHistory = new List<EmailResult>();
+        _taskQueue = taskQueue;
 
         _logger.LogInformation("Email service initialized with SMTP host: {Host}:{Port}", 
             _smtpConfig.Host, _smtpConfig.Port);
@@ -283,14 +286,49 @@ public class EmailService : IEmailService
 
             if (scheduledTime.HasValue && scheduledTime.Value > DateTime.UtcNow)
             {
-                // Schedule for later (in a real implementation, this would use a background job scheduler)
-                _ = Task.Delay(scheduledTime.Value - DateTime.UtcNow)
-                    .ContinueWith(async _ => await SendEmailAsync(emailMessage));
+                // Schedule for later: enqueue a delayed task so hosted service will run it when time arrives
+                if (_taskQueue != null)
+                {
+                    _taskQueue.QueueBackgroundWorkItem(async ct =>
+                    {
+                        var delay = scheduledTime.Value - DateTime.UtcNow;
+                        if (delay > TimeSpan.Zero)
+                            await Task.Delay(delay, ct);
+                        await SendEmailAsync(emailMessage, ct);
+                    });
+                }
+                else
+                {
+                    // Fallback: schedule on thread-pool but observe exceptions
+                    _ = Task.Delay(scheduledTime.Value - DateTime.UtcNow).ContinueWith(t =>
+                    {
+                        // Run send and log any exceptions
+                        SendEmailAsync(emailMessage).ContinueWith(inner =>
+                        {
+                            if (inner.Exception != null)
+                                _logger.LogError(inner.Exception, "Scheduled SendEmail failed");
+                        }, TaskScheduler.Default);
+                    }, TaskScheduler.Default);
+                }
             }
             else
             {
-                // Send immediately in background
-                _ = Task.Run(async () => await SendEmailAsync(emailMessage));
+                // Send immediately in background via background queue if available
+                if (_taskQueue != null)
+                {
+                    _taskQueue.QueueBackgroundWorkItem(async ct => await SendEmailAsync(emailMessage, ct));
+                }
+                else
+                {
+                    // Fallback: ensure exceptions are observed and logged
+                    _ = SendEmailAsync(emailMessage).ContinueWith(t =>
+                    {
+                        if (t.Exception != null)
+                        {
+                            _logger.LogError(t.Exception, "SendEmailAsync background invocation failed");
+                        }
+                    }, TaskScheduler.Default);
+                }
             }
 
             var result = new EmailQueueResult

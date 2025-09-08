@@ -22,10 +22,21 @@ public class AdminNotificationService
         OnNotificationsChanged?.Invoke();
 
         // Auto-remove notification after duration
-        if (durationMs.HasValue)
-        {
-            Task.Delay(durationMs.Value).ContinueWith(_ => RemoveNotification(notification.Id));
-        }
+            if (durationMs.HasValue)
+            {
+                Task.Delay(durationMs.Value).ContinueWith(t =>
+                {
+                    try
+                    {
+                        RemoveNotification(notification.Id);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Best-effort: log to console for UI-side diagnostics
+                        Console.Error.WriteLine($"Failed to auto-remove notification: {ex}");
+                    }
+                }, TaskScheduler.Default);
+            }
     }
 
     public void AddSuccess(string message, int? durationMs = 5000)

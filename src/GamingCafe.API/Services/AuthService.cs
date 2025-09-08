@@ -1,6 +1,7 @@
 using GamingCafe.Core.Models;
 using GamingCafe.Core.DTOs;
 using GamingCafe.Core.Interfaces.Services;
+using GamingCafe.Core.Interfaces.Background;
 using GamingCafe.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -35,14 +36,16 @@ public class AuthService : IAuthService
     private readonly GamingCafeContext _context;
     private readonly IConfiguration _configuration;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IBackgroundTaskQueue? _taskQueue;
     private readonly Microsoft.Extensions.Caching.Memory.IMemoryCache _cache;
 
-    public AuthService(GamingCafeContext context, IConfiguration configuration, IServiceProvider serviceProvider, Microsoft.Extensions.Caching.Memory.IMemoryCache cache)
+    public AuthService(GamingCafeContext context, IConfiguration configuration, IServiceProvider serviceProvider, Microsoft.Extensions.Caching.Memory.IMemoryCache cache, IBackgroundTaskQueue? taskQueue = null)
     {
         _context = context;
         _configuration = configuration;
         _serviceProvider = serviceProvider;
         _cache = cache;
+        _taskQueue = taskQueue;
     }
 
     public async Task<LoginResponse?> AuthenticateAsync(LoginRequest request)
@@ -73,7 +76,7 @@ public class AuthService : IAuthService
                 {
                     RequiresTwoFactor = true,
                     TwoFactorToken = twoFactorToken,
-                        User = new UserDto
+                    User = new UserDto
                     {
                         UserId = user.UserId,
                         Username = user.Username,
@@ -346,17 +349,45 @@ public class AuthService : IAuthService
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
 
-        // Send welcome email and initiate email verification
+        // Send welcome email and initiate email verification using background queue
         try
         {
             var emailService = _serviceProvider.GetService<IEmailService>();
             if (emailService != null)
             {
-                _ = Task.Run(async () => await emailService.SendWelcomeEmailAsync(user.Email, user.Username));
+                if (_taskQueue != null)
+                {
+                    _taskQueue.QueueBackgroundWorkItem(async ct => await emailService.SendWelcomeEmailAsync(user.Email, user.Username));
+                }
+                else
+                {
+                    _ = emailService.SendWelcomeEmailAsync(user.Email, user.Username).ContinueWith(t =>
+                    {
+                        if (t.Exception != null)
+                        {
+                            var logger = _serviceProvider.GetService<Microsoft.Extensions.Logging.ILogger<AuthService>>();
+                            logger?.LogError(t.Exception, "SendWelcomeEmailAsync background invocation failed");
+                        }
+                    }, TaskScheduler.Default);
+                }
             }
 
             // Initiate email verification (stores token and sends verification email)
-            _ = Task.Run(async () => await InitiateEmailVerificationAsync(user.Email));
+            if (_taskQueue != null)
+            {
+                _taskQueue.QueueBackgroundWorkItem(async ct => await InitiateEmailVerificationAsync(user.Email));
+            }
+            else
+            {
+                _ = InitiateEmailVerificationAsync(user.Email).ContinueWith(t =>
+                {
+                    if (t.Exception != null)
+                    {
+                        var logger = _serviceProvider.GetService<Microsoft.Extensions.Logging.ILogger<AuthService>>();
+                        logger?.LogError(t.Exception, "InitiateEmailVerificationAsync background invocation failed");
+                    }
+                }, TaskScheduler.Default);
+            }
         }
         catch
         {
