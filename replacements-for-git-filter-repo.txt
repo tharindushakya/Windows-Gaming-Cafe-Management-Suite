@@ -1,0 +1,11 @@
+# Replacement mappings for git-filter-repo --replace-text
+# format: literal==>replacement
+password123==><<REDACTED_DB_PASSWORD>>
+Admin123!==><<REDACTED_TEST_PASSWORD>>
+GamingCafeSecretKey2024!@#$%^&*()_+==><<REDACTED_JWT_KEY>>
+Host=localhost;Database=GamingCafeDB;Username=gamingcafe;Password=password123==>Host=<<DB_HOST>>;Database=<<DB_NAME>>;Username=<<DB_USER>>;Password=<<DB_PASSWORD>>
+Host=localhost;Database=GamingCafeDB;Username=postgres;Password=postgres==>Host=<<DB_HOST_DEV>>;Database=<<DB_NAME_DEV>>;Username=<<DB_USER_DEV>>;Password=<<DB_PASSWORD_DEV>>
+Admin123!==><<REDACTED_ADMIN_PASSWORD>>
+
+# also replace any standalone JWT-like value if present
+GamingCafeSecretKey2024==><<REDACTED_JWT_KEY_SHORT>>
