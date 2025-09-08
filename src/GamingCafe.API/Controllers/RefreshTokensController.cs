@@ -14,10 +14,12 @@ namespace GamingCafe.API.Controllers
     public class RefreshTokensController : ControllerBase
     {
         private readonly GamingCafeContext _db;
+        private readonly GamingCafe.Core.Interfaces.Services.IAuditService _auditService;
 
-        public RefreshTokensController(GamingCafeContext db)
+        public RefreshTokensController(GamingCafeContext db, GamingCafe.Core.Interfaces.Services.IAuditService auditService)
         {
             _db = db;
+            _auditService = auditService;
         }
 
         // GET: api/admin/refresh-tokens/{userId}
@@ -63,6 +65,11 @@ namespace GamingCafe.API.Controllers
 
                 token.RevokedAt = DateTime.UtcNow;
                 await _db.SaveChangesAsync();
+
+                // Audit log: admin revoked a token
+                var actorId = int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var aid) ? aid : (int?)null;
+                await _auditService.LogActionAsync("AdminRevokeRefreshToken", actorId, System.Text.Json.JsonSerializer.Serialize(new { TokenId = token.TokenId, UserId = userId, DeviceInfo = token.DeviceInfo, Ip = token.IpAddress }));
+
                 return Ok(new { message = "Token revoked" });
             }
 
@@ -73,6 +80,10 @@ namespace GamingCafe.API.Controllers
                     t.RevokedAt = DateTime.UtcNow;
 
                 await _db.SaveChangesAsync();
+
+                var actorId = int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var aid) ? aid : (int?)null;
+                await _auditService.LogActionAsync("AdminRevokeAllRefreshTokens", actorId, System.Text.Json.JsonSerializer.Serialize(new { UserId = userId, Count = tokens.Count }));
+
                 return Ok(new { message = $"Revoked {tokens.Count} tokens" });
             }
 

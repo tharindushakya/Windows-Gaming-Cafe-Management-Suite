@@ -7,16 +7,23 @@ namespace GamingCafe.Core.Interfaces.Background
     /// <summary>
     /// Simple background task queue contract for enqueuing work to be processed by a hosted service.
     /// </summary>
+    public enum BackgroundPriority
+    {
+        High = 0,
+        Normal = 1,
+        Low = 2
+    }
+
     public interface IBackgroundTaskQueue
     {
         /// <summary>
-        /// Enqueue a background work item. The work item receives a CancellationToken and returns a Task.
+        /// Enqueue a background work item. Optionally set priority, max retries, and scheduled time.
         /// </summary>
-        void QueueBackgroundWorkItem(Func<CancellationToken, Task> workItem);
+        void QueueBackgroundWorkItem(Func<CancellationToken, Task> workItem, BackgroundPriority priority = BackgroundPriority.Normal, int maxRetries = 0, DateTimeOffset? scheduled = null);
 
         /// <summary>
-        /// Dequeue a background work item. This method blocks until an item is available or token is cancelled.
+        /// Dequeue the next available background work item according to priority ordering.
         /// </summary>
-        Task<Func<CancellationToken, Task>> DequeueAsync(CancellationToken cancellationToken);
+        Task<(Func<CancellationToken, Task> WorkItem, int MaxRetries, DateTimeOffset? Scheduled)> DequeueAsync(CancellationToken cancellationToken);
     }
 }

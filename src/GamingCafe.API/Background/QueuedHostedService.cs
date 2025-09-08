@@ -25,19 +25,51 @@ namespace GamingCafe.API.Background
             {
                 try
                 {
-                    var workItem = await _taskQueue.DequeueAsync(stoppingToken);
-                    try
+                    var (workItem, maxRetries, scheduled) = await _taskQueue.DequeueAsync(stoppingToken);
+
+                    // If scheduled for the future, wait (respect cancellation)
+                    if (scheduled.HasValue && scheduled.Value > DateTimeOffset.UtcNow)
                     {
-                        await workItem(stoppingToken);
+                        var delay = scheduled.Value - DateTimeOffset.UtcNow;
+                        _logger.LogDebug("Delaying background work by {Delay} until scheduled time {Scheduled}", delay, scheduled.Value);
+                        await Task.Delay(delay, stoppingToken);
                     }
-                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+
+                    var attempt = 0;
+                    var success = false;
+                    Exception? lastEx = null;
+
+                    while (attempt <= maxRetries && !stoppingToken.IsCancellationRequested)
                     {
-                        // graceful shutdown
-                        _logger.LogInformation("Background task cancelled due to shutdown");
+                        try
+                        {
+                            await workItem(stoppingToken);
+                            success = true;
+                            break;
+                        }
+                        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                        {
+                            _logger.LogInformation("Background task cancelled due to shutdown");
+                            break;
+                        }
+                        catch (Exception ex)
+                        {
+                            lastEx = ex;
+                            attempt++;
+                            _logger.LogWarning(ex, "Background task failed on attempt {Attempt}/{MaxRetries}", attempt, maxRetries);
+                            if (attempt <= maxRetries)
+                            {
+                                // simple exponential backoff
+                                var computed = TimeSpan.FromSeconds(Math.Pow(2, attempt));
+                                var backoff = computed < TimeSpan.FromMinutes(5) ? computed : TimeSpan.FromMinutes(5);
+                                await Task.Delay(backoff, stoppingToken);
+                            }
+                        }
                     }
-                    catch (Exception ex)
+
+                    if (!success && lastEx != null)
                     {
-                        _logger.LogError(ex, "Error occurred executing background work item");
+                        _logger.LogError(lastEx, "Background task failed after {Attempts} attempts", attempt);
                     }
                 }
                 catch (OperationCanceledException)
@@ -46,7 +78,7 @@ namespace GamingCafe.API.Background
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error occurred while dequeuing background work item");
+                    _logger.LogError(ex, "Error occurred while dequeuing or processing background work item");
                     await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
                 }
             }
