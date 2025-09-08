@@ -14,6 +14,10 @@ using Hangfire;
 using Hangfire.PostgreSql;
 using GamingCafe.API.Filters;
 using Microsoft.AspNetCore.DataProtection;
+using System.Security.Cryptography.X509Certificates;
+using System.Runtime.InteropServices;
+using Serilog;
+using Serilog.Events;
 using Microsoft.AspNetCore.Mvc;
 using Asp.Versioning;
 // OpenTelemetry instrumentation was attempted but reverted to avoid package conflicts; use internal /metrics endpoint instead if needed.
@@ -25,13 +29,22 @@ using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure Serilog: initialize a default logger and attach it to the Host. This ensures
+// structured diagnostics are available early. Configuration will override these defaults.
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .WriteTo.File("logs/log-.txt", rollingInterval: Serilog.RollingInterval.Day, retainedFileCountLimit: 14)
+    .CreateLogger();
+
+builder.Host.UseSerilog();
+
 // NOTE: DataProtection key persistence is configured later below so we can prefer
 // a centralized store (Redis) when available. This avoids non-sticky local file
 // storage which breaks auth in scaled multi-instance deployments.
 
-// Configure Serilog - Comment out until Serilog packages are installed
-// builder.Host.UseSerilog((context, configuration) =>
-//     configuration.ReadFrom.Configuration(context.Configuration));
+// ...existing code...
 
 // Add services to the container.
 builder.Services.AddControllers();
@@ -67,8 +80,7 @@ try
 }
 catch (Exception ex)
 {
-    var logger = LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<Program>();
-    logger.LogWarning(ex, "Redis setup failed during registration. Application will run without Redis cache.");
+    Log.Warning(ex, "Redis setup failed during registration. Application will run without Redis cache.");
 }
 
 // Respect DataProtection:UseRedis in configuration. Default to true to prefer Redis in multi-instance.
@@ -91,8 +103,7 @@ if (useRedisForDataProtection)
     var dpRedisConnection = builder.Configuration["DataProtection:Redis:Connection"] ?? builder.Configuration.GetConnectionString("Redis");
     if (string.IsNullOrWhiteSpace(dpRedisConnection))
     {
-        var logger = LoggerFactory.Create(b => b.AddConsole()).CreateLogger("Program");
-        logger.LogWarning("DataProtection:UseRedis is true but no Redis connection string was found; falling back to file keys.");
+    Log.Warning("DataProtection:UseRedis is true but no Redis connection string was found; falling back to file keys.");
         dataProtectionBuilder.PersistKeysToFileSystem(new System.IO.DirectoryInfo(keysDir));
     }
     else
@@ -104,12 +115,62 @@ if (useRedisForDataProtection)
             builder.Services.AddSingleton<IConnectionMultiplexer>(mux);
 
             // Persist DataProtection keys to StackExchange.Redis using the configured key
-            dataProtectionBuilder.PersistKeysToStackExchangeRedis(mux, dpRedisKey);
+                dataProtectionBuilder.PersistKeysToStackExchangeRedis(mux, dpRedisKey);
+                // Protect keys at rest: prefer certificate (thumbprint or PFX), fall back to DPAPI on Windows
+                var certThumb = builder.Configuration["DataProtection:Certificate:Thumbprint"];
+                var pfxPath = builder.Configuration["DataProtection:Certificate:PfxPath"];
+                var pfxPassword = builder.Configuration["DataProtection:Certificate:PfxPassword"];
+                if (!string.IsNullOrWhiteSpace(certThumb))
+                {
+                    try
+                    {
+                        var storeName = builder.Configuration["DataProtection:Certificate:StoreName"] ?? "My";
+                        var storeLocationStr = builder.Configuration["DataProtection:Certificate:StoreLocation"] ?? "CurrentUser";
+                        var storeLocation = (StoreLocation)Enum.Parse(typeof(StoreLocation), storeLocationStr, true);
+                        using var store = new X509Store(storeName, storeLocation);
+                        store.Open(OpenFlags.ReadOnly);
+                        var certs = store.Certificates.Find(X509FindType.FindByThumbprint, certThumb, validOnly: false);
+                        if (certs.Count > 0)
+                        {
+                            var cert = certs[0];
+                            dataProtectionBuilder.ProtectKeysWithCertificate(cert);
+                        }
+                        else
+                        {
+                            Log.Warning("DataProtection certificate with thumbprint {thumb} not found in store {store}\\{location}. Falling back to DPAPI where available.", certThumb, storeName, storeLocationStr);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warning(ex, "Error loading DataProtection certificate by thumbprint; falling back to DPAPI if available.");
+                    }
+                }
+                else if (!string.IsNullOrWhiteSpace(pfxPath) && File.Exists(pfxPath))
+                {
+                    try
+                    {
+                        var pwd = pfxPassword ?? string.Empty;
+                        var cert = new X509Certificate2(pfxPath, pwd, X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet);
+                        dataProtectionBuilder.ProtectKeysWithCertificate(cert);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warning(ex, "Failed to load PFX for DataProtection key encryption; falling back to DPAPI where available.");
+                    }
+                }
+                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    // DPAPI is available on Windows
+                    dataProtectionBuilder.ProtectKeysWithDpapi();
+                }
+                else
+                {
+                    Log.Warning("No XML encryptor configured for DataProtection keys. Configure a certificate (DataProtection:Certificate) or enable platform protection to avoid storing keys unencrypted.");
+                }
         }
         catch (Exception ex)
         {
-            var logger = LoggerFactory.Create(b => b.AddConsole()).CreateLogger("Program");
-            logger.LogWarning(ex, "Failed to connect to Redis for DataProtection; falling back to filesystem keys.");
+            Log.Warning(ex, "Failed to connect to Redis for DataProtection; falling back to filesystem keys.");
             dataProtectionBuilder.PersistKeysToFileSystem(new System.IO.DirectoryInfo(keysDir));
         }
     }
@@ -338,6 +399,22 @@ var app = builder.Build();
 // Use forwarded headers middleware early so downstream middleware (rate limiter, logging) sees the correct client IP
 app.UseForwardedHeaders();
 
+// Conditional request/response body logging middleware (config-gated, safe defaults). Place early so it sees real request/response but after forwarded headers.
+try
+{
+    var config = app.Services.GetService<IConfiguration>();
+    var enabled = config?.GetValue<bool?>("Logging:RequestResponse:Enabled") ?? false;
+    if (enabled)
+    {
+        app.UseRequestResponseLogging();
+        Log.Information("Request/Response logging middleware enabled");
+    }
+}
+catch (Exception ex)
+{
+    Log.Warning(ex, "Error while registering RequestResponseLogging middleware");
+}
+
 // Startup verification: if Redis is configured for DataProtection, warn if no keys are present
 if (useRedisForDataProtection)
 {
@@ -504,34 +581,73 @@ app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthC
     Predicate = _ => false // No checks, just returns healthy if app is running
 });
 
-// Ensure database is created and seeded
+// Apply EF Core migrations under an advisory lock to avoid race conditions when multiple instances start
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<GamingCafeContext>();
-    
-    // Ensure database is created
-    context.Database.EnsureCreated();
-    
-    // Apply any pending migrations
-    if (context.Database.GetPendingMigrations().Any())
+    var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+    var connectionString = configuration.GetConnectionString("DefaultConnection");
+
+    // Only run migrations when there are pending migrations
+    try
     {
-        context.Database.Migrate();
+        if (context.Database.GetPendingMigrations().Any())
+        {
+            // Use Postgres advisory lock to serialize migrations across instances
+            try
+            {
+                await using var conn = new Npgsql.NpgsqlConnection(connectionString);
+                await conn.OpenAsync();
+                // Use a fixed lock key; choose a value unique to this application
+                const long advisoryLockKey1 = 92233720368547758; // large arbitrary number
+                await using (var cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT pg_advisory_lock(@key)";
+                    cmd.Parameters.AddWithValue("key", advisoryLockKey1);
+                    await cmd.ExecuteScalarAsync();
+                }
+
+                try
+                {
+                    Log.Information("Acquired advisory lock; applying pending EF migrations...");
+                    await context.Database.MigrateAsync();
+                    Log.Information("Database migrations applied successfully.");
+                }
+                finally
+                {
+                    await using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = "SELECT pg_advisory_unlock(@key)";
+                        cmd.Parameters.AddWithValue("key", advisoryLockKey1);
+                        await cmd.ExecuteScalarAsync();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to acquire advisory lock or apply migrations; another instance may be migrating. Proceeding without applying migrations.");
+            }
+        }
+
+        // Seed the database if environment is Development
+        if (app.Environment.IsDevelopment())
+        {
+            var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+            try
+            {
+                var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
+                await seeder.SeedAsync();
+                logger.LogInformation("Database seeding completed successfully");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "An error occurred while seeding the database");
+            }
+        }
     }
-    
-    // Seed the database if environment is Development
-    if (app.Environment.IsDevelopment())
+    catch (Exception ex)
     {
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        try
-        {
-            var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
-            await seeder.SeedAsync();
-            logger.LogInformation("Database migration and seeding completed successfully");
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "An error occurred while seeding the database");
-        }
+        Log.Warning(ex, "Error while checking/applying migrations at startup");
     }
 }
 
