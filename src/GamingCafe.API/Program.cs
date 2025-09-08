@@ -256,6 +256,15 @@ builder.Services.AddScoped<IBackupService, BackupService>();
 // Database seeder
 builder.Services.AddScoped<DatabaseSeeder>();
 
+// Respect X-Forwarded-* headers when behind a proxy/load balancer so RemoteIpAddress reflects client IP
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // Clear known networks/proxies so middleware will accept headers from any trusted reverse proxy configured externally.
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 // Add deployment and monitoring services - Comment out until implemented
 // builder.Services.AddScoped<IDeploymentValidationService, DeploymentValidationService>();
 // builder.Services.AddScoped<IBackupMonitoringService, BackupMonitoringService>();
@@ -277,16 +286,6 @@ builder.Services.AddSwaggerGen(opts =>
 // A simple /metrics endpoint is exposed later in this file for basic Prometheus-style scraping.
 
 var app = builder.Build();
-
-// Respect X-Forwarded-* headers when behind a proxy/load balancer so RemoteIpAddress reflects client IP
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
-{
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    // Clear known networks/proxies so middleware will accept headers from any trusted reverse proxy configured externally.
-    options.KnownNetworks.Clear();
-    options.KnownProxies.Clear();
-});
-
 // Use forwarded headers middleware early so downstream middleware (rate limiter, logging) sees the correct client IP
 app.UseForwardedHeaders();
 
