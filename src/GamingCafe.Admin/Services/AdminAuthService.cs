@@ -41,10 +41,17 @@ public class AdminAuthService
                     PropertyNameCaseInsensitive = true
                 });
 
-                if (loginResponse != null && !string.IsNullOrEmpty(loginResponse.AccessToken))
+                // Return the deserialized response even when an access token is not yet present
+                // (server may require two-factor and return RequiresTwoFactor=true with no token).
+                if (loginResponse != null)
                 {
-                    await StoreTokenAsync(loginResponse.AccessToken);
-                    await CreateAuthenticationCookieAsync(loginResponse.User);
+                    // Only create the authentication cookie when an access token is issued
+                    if (!string.IsNullOrEmpty(loginResponse.AccessToken))
+                    {
+                        await StoreTokenAsync(loginResponse.AccessToken);
+                        await CreateAuthenticationCookieAsync(loginResponse.User, loginResponse.AccessToken);
+                    }
+
                     return loginResponse;
                 }
             }
@@ -69,17 +76,18 @@ public class AdminAuthService
         await ClearTokenAsync();
     }
 
-    public async Task<string?> GetTokenAsync()
+    public Task<string?> GetTokenAsync()
     {
         var httpContext = _httpContextAccessor.HttpContext;
         if (httpContext?.User?.Identity?.IsAuthenticated == true)
         {
-            return httpContext.User.FindFirst("AccessToken")?.Value;
+            var token = httpContext.User.FindFirst("AccessToken")?.Value;
+            return Task.FromResult<string?>(token);
         }
-        return null;
+        return Task.FromResult<string?>(null);
     }
 
-    public async Task<UserDto?> GetCurrentUserAsync()
+    public Task<UserDto?> GetCurrentUserAsync()
     {
         var httpContext = _httpContextAccessor.HttpContext;
         if (httpContext?.User?.Identity?.IsAuthenticated == true)
@@ -87,13 +95,14 @@ public class AdminAuthService
             var userJson = httpContext.User.FindFirst("UserData")?.Value;
             if (!string.IsNullOrEmpty(userJson))
             {
-                return JsonSerializer.Deserialize<UserDto>(userJson, new JsonSerializerOptions
+                var user = JsonSerializer.Deserialize<UserDto>(userJson, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
                 });
+                return Task.FromResult(user);
             }
         }
-        return null;
+        return Task.FromResult<UserDto?>(null);
     }
 
     public bool IsAuthenticated()
@@ -108,20 +117,20 @@ public class AdminAuthService
         return httpContext?.User?.IsInRole(role) == true;
     }
 
-    private async Task StoreTokenAsync(string token)
+    private Task StoreTokenAsync(string token)
     {
         // Token will be stored in the authentication cookie
         // This is handled in CreateAuthenticationCookieAsync
-        await Task.CompletedTask;
+        return Task.CompletedTask;
     }
 
-    private async Task ClearTokenAsync()
+    private Task ClearTokenAsync()
     {
         // Token is cleared when the authentication cookie is removed
-        await Task.CompletedTask;
+        return Task.CompletedTask;
     }
 
-    private async Task CreateAuthenticationCookieAsync(UserDto user)
+    private async Task CreateAuthenticationCookieAsync(UserDto user, string? accessToken = null)
     {
         var httpContext = _httpContextAccessor.HttpContext;
         if (httpContext == null) return;
@@ -137,10 +146,10 @@ public class AdminAuthService
             new Claim("UserData", JsonSerializer.Serialize(user))
         };
 
-        var token = await GetTokenAsync();
-        if (!string.IsNullOrEmpty(token))
+        // Include the access token in the claims if provided
+        if (!string.IsNullOrEmpty(accessToken))
         {
-            claims.Add(new Claim("AccessToken", token));
+            claims.Add(new Claim("AccessToken", accessToken));
         }
 
         var claimsIdentity = new ClaimsIdentity(claims, "Cookies");
