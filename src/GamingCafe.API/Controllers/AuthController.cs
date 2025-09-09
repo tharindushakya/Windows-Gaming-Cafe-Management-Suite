@@ -90,8 +90,13 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
+        if (request == null)
+            return BadRequest("Invalid request");
+
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
+
+    // inputs are normalized by the global NormalizeInputFilter (trim, lowercase for email/username)
 
         var user = new User
         {
@@ -100,7 +105,8 @@ public class AuthController : ControllerBase
             FirstName = request.FirstName,
             LastName = request.LastName,
             PhoneNumber = request.PhoneNumber,
-            DateOfBirth = request.DateOfBirth
+            // DateOfBirth is not collected via public registration endpoint.
+            // Leave DateOfBirth as default (DateTime.MinValue) or populate later via admin profile update.
         };
 
         var result = await _authService.RegisterAsync(user, request.Password);

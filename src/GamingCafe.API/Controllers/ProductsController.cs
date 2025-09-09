@@ -16,11 +16,13 @@ public class ProductsController : ControllerBase
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<ProductsController> _logger;
+    private readonly GamingCafe.Core.Interfaces.Services.ICacheService _cacheService;
 
-    public ProductsController(IUnitOfWork unitOfWork, ILogger<ProductsController> logger)
+    public ProductsController(IUnitOfWork unitOfWork, ILogger<ProductsController> logger, GamingCafe.Core.Interfaces.Services.ICacheService cacheService)
     {
         _unitOfWork = unitOfWork;
         _logger = logger;
+        _cacheService = cacheService;
     }
 
     /// <summary>
@@ -31,6 +33,14 @@ public class ProductsController : ControllerBase
     {
         try
         {
+            // try cache first
+            var cacheKey = "products:all"; // simple key for default paged view; advanced: include query hash
+            var cached = await _cacheService.GetAsync<PagedResponse<ProductDto>>(cacheKey);
+            if (cached != null)
+            {
+                return Ok(cached);
+            }
+
             var products = await _unitOfWork.Repository<Product>().GetAllAsync();
             var filteredProducts = products.AsQueryable();
 
@@ -118,6 +128,9 @@ public class ProductsController : ControllerBase
                 TotalPages = (int)Math.Ceiling((double)totalCount / request.PageSize)
             };
 
+            // cache the default list for 5 minutes
+            await _cacheService.SetAsync(cacheKey, response, TimeSpan.FromMinutes(5));
+
             return Ok(response);
         }
         catch (Exception ex)
@@ -153,6 +166,10 @@ public class ProductsController : ControllerBase
                 UpdatedAt = product.UpdatedAt
             };
 
+            // set per-product cache
+            var productCacheKey = $"product:{id}";
+            await _cacheService.SetAsync(productCacheKey, productDto, TimeSpan.FromMinutes(5));
+
             return Ok(productDto);
         }
         catch (Exception ex)
@@ -183,7 +200,7 @@ public class ProductsController : ControllerBase
             var product = new Product
             {
                 Name = request.Name,
-                Description = request.Description ?? string.Empty,
+                Description = request.Description!,
                 Price = request.Price,
                 Category = request.Category,
                 StockQuantity = request.StockQuantity ?? 0,
@@ -200,7 +217,7 @@ public class ProductsController : ControllerBase
             {
                 ProductId = product.ProductId,
                 Name = product.Name,
-                Description = product.Description,
+                Description = product.Description!,
                 Price = product.Price,
                 Category = product.Category,
                 StockQuantity = product.StockQuantity,
@@ -209,6 +226,9 @@ public class ProductsController : ControllerBase
                 CreatedAt = product.CreatedAt,
                 UpdatedAt = product.UpdatedAt
             };
+
+            // invalidate product list cache
+            await _cacheService.RemoveAsync("products:all");
 
             _logger.LogInformation("Created new product: {ProductName} with ID {ProductId}", product.Name, product.ProductId);
             return CreatedAtAction(nameof(GetProduct), new { id = product.ProductId }, productDto);
@@ -247,7 +267,7 @@ public class ProductsController : ControllerBase
 
             // Update product properties
             product.Name = request.Name;
-            product.Description = request.Description ?? string.Empty;
+            product.Description = request.Description!;
             product.Price = request.Price;
             product.Category = request.Category;
             product.StockQuantity = request.StockQuantity ?? product.StockQuantity;
@@ -262,7 +282,7 @@ public class ProductsController : ControllerBase
             {
                 ProductId = product.ProductId,
                 Name = product.Name,
-                Description = product.Description,
+                Description = product.Description!,
                 Price = product.Price,
                 Category = product.Category,
                 StockQuantity = product.StockQuantity,
@@ -271,6 +291,10 @@ public class ProductsController : ControllerBase
                 CreatedAt = product.CreatedAt,
                 UpdatedAt = product.UpdatedAt
             };
+
+            // invalidate caches for this product and product list
+            await _cacheService.RemoveAsync("products:all");
+            await _cacheService.RemoveAsync($"product:{id}");
 
             _logger.LogInformation("Updated product with ID {ProductId}", id);
             return Ok(productDto);
@@ -307,6 +331,10 @@ public class ProductsController : ControllerBase
                 _unitOfWork.Repository<Product>().Update(product);
                 await _unitOfWork.SaveChangesAsync();
                 
+                // invalidate caches
+                await _cacheService.RemoveAsync("products:all");
+                await _cacheService.RemoveAsync($"product:{id}");
+
                 _logger.LogInformation("Soft deleted product with ID {ProductId} (marked as inactive)", id);
                 return Ok(new { message = "Product marked as inactive due to existing transaction references" });
             }
@@ -316,6 +344,10 @@ public class ProductsController : ControllerBase
                 _unitOfWork.Repository<Product>().Delete(product);
                 await _unitOfWork.SaveChangesAsync();
                 
+                // invalidate caches
+                await _cacheService.RemoveAsync("products:all");
+                await _cacheService.RemoveAsync($"product:{id}");
+
                 _logger.LogInformation("Hard deleted product with ID {ProductId}", id);
                 return NoContent();
             }
@@ -355,6 +387,10 @@ public class ProductsController : ControllerBase
 
             _logger.LogInformation("Updated stock for product {ProductId} from {OldStock} to {NewStock}", 
                 id, oldStock, request.StockQuantity);
+
+            // invalidate product caches
+            await _cacheService.RemoveAsync("products:all");
+            await _cacheService.RemoveAsync($"product:{id}");
 
             return Ok(new { 
                 ProductId = id, 

@@ -78,7 +78,7 @@ public class UsersController : ControllerBase
                     FirstName = u.FirstName,
                     LastName = u.LastName,
                     PhoneNumber = u.PhoneNumber,
-                    DateOfBirth = u.DateOfBirth,
+                    // DateOfBirth intentionally omitted from API responses
                     Role = u.Role.ToString(),
                     IsActive = u.IsActive,
                     WalletBalance = 0m, // will populate below from Wallet table
@@ -135,7 +135,7 @@ public class UsersController : ControllerBase
                 FirstName = user.FirstName,
                 LastName = user.LastName,
                 PhoneNumber = user.PhoneNumber,
-                DateOfBirth = user.DateOfBirth,
+                // DateOfBirth intentionally omitted from API responses
                 Role = user.Role.ToString(),
                 IsActive = user.IsActive,
                 WalletBalance = wallet?.Balance ?? 0m,
@@ -163,6 +163,9 @@ public class UsersController : ControllerBase
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
+            if (request == null)
+                return BadRequest("Invalid request");
+
             // Check if username already exists
             var existingUser = await _unitOfWork.Repository<User>().FirstOrDefaultAsync(u => u.Username == request.Username);
             if (existingUser != null)
@@ -179,11 +182,12 @@ public class UsersController : ControllerBase
             var user = new User
             {
                 Username = request.Username,
-                Email = request.Email ?? string.Empty,
+                Email = request.Email!,
                 FirstName = request.FirstName,
                 LastName = request.LastName,
-                PhoneNumber = request.PhoneNumber ?? string.Empty,
-                DateOfBirth = request.DateOfBirth ?? DateTime.MinValue,
+                PhoneNumber = request.PhoneNumber!,
+                // Store DateOfBirth if provided by admin
+                DateOfBirth = (request.DateOfBirth ?? DateTime.MinValue).Date,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
                 Role = Enum.Parse<UserRole>(request.Role),
                 IsActive = true,
@@ -215,7 +219,7 @@ public class UsersController : ControllerBase
                 FirstName = user.FirstName,
                 LastName = user.LastName,
                 PhoneNumber = user.PhoneNumber,
-                DateOfBirth = user.DateOfBirth,
+                DateOfBirth = user.DateOfBirth.Date,
                 Role = user.Role.ToString(),
                 IsActive = user.IsActive,
                 WalletBalance = wallet?.Balance ?? 0m,
@@ -266,11 +270,15 @@ public class UsersController : ControllerBase
 
             // Update user properties
             user.Username = request.Username;
-            user.Email = request.Email ?? string.Empty;
+            user.Email = request.Email!;
             user.FirstName = request.FirstName;
             user.LastName = request.LastName;
-            user.PhoneNumber = request.PhoneNumber ?? string.Empty;
-            user.DateOfBirth = request.DateOfBirth ?? user.DateOfBirth; // Keep existing if null
+            user.PhoneNumber = request.PhoneNumber!;
+            // Update DateOfBirth when provided
+            if (request.DateOfBirth.HasValue)
+            {
+                user.DateOfBirth = request.DateOfBirth.Value.Date;
+            }
             
             if (Enum.TryParse<UserRole>(request.Role, out var role))
                 user.Role = role;

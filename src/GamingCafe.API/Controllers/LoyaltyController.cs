@@ -16,11 +16,13 @@ public class LoyaltyController : ControllerBase
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<LoyaltyController> _logger;
+    private readonly GamingCafe.Core.Interfaces.Services.ICacheService _cacheService;
 
-    public LoyaltyController(IUnitOfWork unitOfWork, ILogger<LoyaltyController> logger)
+    public LoyaltyController(IUnitOfWork unitOfWork, ILogger<LoyaltyController> logger, GamingCafe.Core.Interfaces.Services.ICacheService cacheService)
     {
         _unitOfWork = unitOfWork;
         _logger = logger;
+        _cacheService = cacheService;
     }
 
     /// <summary>
@@ -32,6 +34,11 @@ public class LoyaltyController : ControllerBase
     {
         try
         {
+            var cacheKey = "loyalty:programs";
+            var cached = await _cacheService.GetAsync<PagedResponse<LoyaltyProgramDto>>(cacheKey);
+            if (cached != null)
+                return Ok(cached);
+
             var programs = await _unitOfWork.Repository<LoyaltyProgram>().GetAllAsync();
             var filteredPrograms = programs.AsQueryable();
 
@@ -95,6 +102,9 @@ public class LoyaltyController : ControllerBase
                 TotalPages = (int)Math.Ceiling((double)totalCount / request.PageSize)
             };
 
+            // cache for 1 hour
+            await _cacheService.SetAsync(cacheKey, response, TimeSpan.FromHours(1));
+
             return Ok(response);
         }
         catch (Exception ex)
@@ -113,6 +123,11 @@ public class LoyaltyController : ControllerBase
     {
         try
         {
+            var cacheKey = $"loyalty:program:{id}";
+            var cached = await _cacheService.GetAsync<LoyaltyProgramDto>(cacheKey);
+            if (cached != null)
+                return Ok(cached);
+
             var program = await _unitOfWork.Repository<LoyaltyProgram>().GetByIdAsync(id);
             if (program == null)
                 return NotFound();
@@ -132,6 +147,8 @@ public class LoyaltyController : ControllerBase
                 ActiveMemberCount = program.Users.Count(u => u.IsActive)
             };
 
+            // cache program
+            await _cacheService.SetAsync(cacheKey, programDto, TimeSpan.FromHours(1));
             return Ok(programDto);
         }
         catch (Exception ex)
@@ -188,6 +205,9 @@ public class LoyaltyController : ControllerBase
                 CreatedAt = program.CreatedAt,
                 ActiveMemberCount = 0
             };
+
+            // invalidate programs list cache
+            await _cacheService.RemoveAsync("loyalty:programs");
 
             _logger.LogInformation("Created new loyalty program: {ProgramName} (ID: {ProgramId})", 
                 program.ProgramName, program.ProgramId);
@@ -250,6 +270,10 @@ public class LoyaltyController : ControllerBase
                 ActiveMemberCount = program.Users.Count(u => u.IsActive)
             };
 
+            // invalidate caches for programs list and this program
+            await _cacheService.RemoveAsync("loyalty:programs");
+            await _cacheService.RemoveAsync($"loyalty:program:{id}");
+
             _logger.LogInformation("Updated loyalty program: {ProgramName} (ID: {ProgramId})", 
                 program.ProgramName, program.ProgramId);
 
@@ -283,6 +307,10 @@ public class LoyaltyController : ControllerBase
             program.IsActive = false;
             _unitOfWork.Repository<LoyaltyProgram>().Update(program);
             await _unitOfWork.SaveChangesAsync();
+
+            // invalidate caches
+            await _cacheService.RemoveAsync("loyalty:programs");
+            await _cacheService.RemoveAsync($"loyalty:program:{id}");
 
             _logger.LogInformation("Deactivated loyalty program: {ProgramName} (ID: {ProgramId})", 
                 program.ProgramName, program.ProgramId);

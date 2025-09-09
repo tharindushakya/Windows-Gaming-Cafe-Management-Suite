@@ -89,7 +89,11 @@ builder.Host.UseSerilog();
 // ...existing code...
 
 // Add services to the container.
-builder.Services.AddControllers();
+// Register controllers and include the global NormalizeInputFilter so request DTOs are normalized (trim, lowercase emails/usernames)
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add(typeof(GamingCafe.API.Filters.NormalizeInputFilter));
+});
 
 // Configure API Versioning and API explorer for Swagger integration
 builder.Services.AddApiVersioning(options =>
@@ -256,6 +260,20 @@ builder.Services.AddAuthorization(options =>
 
     // Scope/claim based policy example for station management operations
     options.AddPolicy(PolicyNames.RequireStationScope, policy => policy.RequireClaim("scope", "stations.manage"));
+
+    // Example permission-based policies
+    // ManageInventory: Admin OR (Staff with permission inv:write)
+    options.AddPolicy("ManageInventory", policy => policy.RequireAssertion(ctx =>
+        ctx.User.IsInRole(RoleNames.Admin) || ctx.User.HasClaim(c => c.Type == GamingCafe.Core.Authorization.CustomClaimTypes.Permission && c.Value == "inv:write")
+    ));
+
+    // ViewFinancials: Admin only
+    options.AddPolicy("ViewFinancials", policy => policy.RequireRole(RoleNames.Admin));
+
+    // IssueRefunds: Admin AND permission txn:refund (explicit check for both)
+    options.AddPolicy("IssueRefunds", policy => policy.RequireAssertion(ctx =>
+        ctx.User.IsInRole(RoleNames.Admin) && ctx.User.HasClaim(c => c.Type == GamingCafe.Core.Authorization.CustomClaimTypes.Permission && c.Value == "txn:refund")
+    ));
 
     // Owner-or-admin policy uses an IAuthorizationHandler registered below
     options.AddPolicy(PolicyNames.RequireOwnerOrAdmin, policy => policy.AddRequirements(new GamingCafe.API.Authorization.OwnershipRequirement()));
@@ -475,6 +493,9 @@ builder.Services.AddScoped<IAuditService>(sp => new ApiAuditService(
     sp.GetRequiredService<GamingCafe.Data.Services.AuditService>(),
     sp.GetRequiredService<IHttpContextAccessor>()));
 builder.Services.AddScoped<IBackupService, BackupService>();
+// Register maintenance and outbox dispatcher for Hangfire integration
+builder.Services.AddScoped<MaintenanceService>();
+builder.Services.AddScoped<GamingCafe.API.Background.IOutboxDispatcher, GamingCafe.API.Background.HangfireOutboxDispatcher>();
 // Database seeder
 builder.Services.AddScoped<DatabaseSeeder>();
 
@@ -769,6 +790,21 @@ using (var startupScope = app.Services.CreateScope())
             var logger2 = startupScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
             logger2.LogInformation("Scheduled recurring backup with cron: {Cron}", cronExpr);
         }
+
+        // Register maintenance recurring jobs
+        var enableMaintenance = bool.TryParse(config["Maintenance:EnableRecurring"], out var mEnabled) && mEnabled;
+        if (enableMaintenance)
+        {
+            // Cleanup expired refresh tokens - run every hour
+            RecurringJob.AddOrUpdate("maintenance-cleanup-refresh-tokens", () => startupScope.ServiceProvider.GetRequiredService<MaintenanceService>().CleanupExpiredRefreshTokensAsync(), Cron.Hourly);
+
+            // Purge old audit logs - run daily at 3am
+            var auditCron = config["Maintenance:AuditPurgeCron"] ?? "0 3 * * *";
+            RecurringJob.AddOrUpdate("maintenance-purge-audit-logs", () => startupScope.ServiceProvider.GetRequiredService<MaintenanceService>().PurgeOldAuditLogsAsync(int.Parse(config["Maintenance:AuditRetentionDays"] ?? "90")), auditCron);
+
+            // Recalculate KPI aggregates - run every 6 hours
+            RecurringJob.AddOrUpdate("maintenance-recalc-kpi", () => startupScope.ServiceProvider.GetRequiredService<MaintenanceService>().RecalculateKpiAggregatesAsync(), "0 */6 * * *");
+        }
     }
     catch (Exception ex)
     {
@@ -776,6 +812,9 @@ using (var startupScope = app.Services.CreateScope())
         logger.LogWarning(ex, "Startup service checks failed");
     }
 }
+
+// Assign static service provider for background/hangfire workers that need DI
+GamingCafe.API.Background.StaticServiceProvider.ServiceProvider = app.Services;
 
 app.Run();
 

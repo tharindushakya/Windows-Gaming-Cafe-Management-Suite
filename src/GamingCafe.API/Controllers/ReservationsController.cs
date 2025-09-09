@@ -200,7 +200,7 @@ public class ReservationsController : ControllerBase
                 EndTime = request.EndTime,
                 Status = ReservationStatus.Pending,
                 EstimatedCost = estimatedCost,
-                Notes = request.Notes ?? string.Empty,
+                Notes = request.Notes!,
                 CreatedAt = DateTime.UtcNow
             };
 

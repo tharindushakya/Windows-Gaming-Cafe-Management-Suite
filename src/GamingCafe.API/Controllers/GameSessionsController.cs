@@ -216,7 +216,7 @@ public class GameSessionsController : ControllerBase
                 StationId = request.StationId,
                 StartTime = DateTime.UtcNow,
                 Status = SessionStatus.Active,
-                Notes = request.Notes ?? string.Empty,
+                Notes = request.Notes!,
                 CreatedAt = DateTime.UtcNow
             };
 

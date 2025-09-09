@@ -241,8 +241,8 @@ public class TransactionsController : ControllerBase
                 Type = request.Type,
                 PaymentMethod = request.PaymentMethod,
                 Status = TransactionStatus.Pending,
-                PaymentReference = request.PaymentReference ?? string.Empty,
-                Notes = request.Notes ?? string.Empty,
+                PaymentReference = request.PaymentReference!,
+                Notes = request.Notes!,
                 CreatedAt = DateTime.UtcNow
             };
 

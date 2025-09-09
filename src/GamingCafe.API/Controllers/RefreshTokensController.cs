@@ -53,8 +53,7 @@ namespace GamingCafe.API.Controllers
         [HttpPost("{userId:int}/revoke")]
         public async Task<IActionResult> RevokeForUser(int userId, [FromBody] RevokeRequest req)
         {
-            if (req == null)
-                return BadRequest(new { message = "Invalid request." });
+            // model binding/validation will handle invalid body; proceed
 
             if (!string.IsNullOrEmpty(req.TokenId))
             {

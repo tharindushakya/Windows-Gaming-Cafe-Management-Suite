@@ -7,6 +7,7 @@ namespace GamingCafe.Core.Authorization
     {
         public const string Admin = "Admin";
         public const string Manager = "Manager";
+    public const string Staff = "Staff";
         public const string Administrator = "Administrator"; // sometimes used in legacy checks
     }
 }

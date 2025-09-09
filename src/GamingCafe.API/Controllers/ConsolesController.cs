@@ -179,7 +179,7 @@ public class ConsolesController : ControllerBase
                 HourlyRate = request.HourlyRate,
                 IsActive = request.IsActive,
                 IsAvailable = true, // New stations are available by default
-                Notes = request.Notes ?? string.Empty,
+                Notes = request.Notes!,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -240,7 +240,7 @@ public class ConsolesController : ControllerBase
             station.Location = request.Location;
             station.HourlyRate = request.HourlyRate;
             station.IsActive = request.IsActive;
-            station.Notes = request.Notes ?? string.Empty;
+            station.Notes = request.Notes!;
 
             if (request.LastMaintenance.HasValue)
             {

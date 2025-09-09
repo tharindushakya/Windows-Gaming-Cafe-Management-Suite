@@ -17,18 +17,28 @@ public class StationsController : ControllerBase
 {
     private readonly IStationService _stationService;
     private readonly IHubContext<GameCafeHub> _hubContext;
+    private readonly GamingCafe.Core.Interfaces.Services.ICacheService _cacheService;
 
-    public StationsController(IStationService stationService, IHubContext<GameCafeHub> hubContext)
+    public StationsController(IStationService stationService, IHubContext<GameCafeHub> hubContext, GamingCafe.Core.Interfaces.Services.ICacheService cacheService)
     {
         _stationService = stationService;
         _hubContext = hubContext;
+        _cacheService = cacheService;
     }
 
     [HttpGet]
     public async Task<IActionResult> GetAllStations()
     {
+        var cacheKey = "stations:all";
+        var cached = await _cacheService.GetAsync<List<StationDto>>(cacheKey);
+        if (cached != null)
+            return Ok(cached);
+
         var stations = await _stationService.GetAllStationsAsync();
-        return Ok(stations.Select(MapToDto));
+        var dto = stations.Select(MapToDto).ToList();
+
+        await _cacheService.SetAsync(cacheKey, dto, TimeSpan.FromSeconds(15));
+        return Ok(dto);
     }
 
     [HttpGet("available")]
@@ -41,11 +51,18 @@ public class StationsController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetStation(int id)
     {
+        var cacheKey = $"station:snapshot:{id}";
+    var cached = await _cacheService.GetAsync<StationDto>(cacheKey);
+        if (cached != null)
+            return Ok(cached);
+
         var station = await _stationService.GetStationByIdAsync(id);
         if (station == null)
             return NotFound();
 
-        return Ok(MapToDto(station));
+        var dto = MapToDto(station);
+        await _cacheService.SetAsync(cacheKey, dto, TimeSpan.FromSeconds(15));
+        return Ok(dto);
     }
 
     [HttpPost]
@@ -69,10 +86,14 @@ public class StationsController : ControllerBase
             MacAddress = request.MacAddress ?? ""
         };
 
-        var createdStation = await _stationService.CreateStationAsync(station);
-        await _hubContext.Clients.All.SendAsync("StationCreated", MapToDto(createdStation));
+    var createdStation = await _stationService.CreateStationAsync(station);
+    var createdDto = MapToDto(createdStation);
+    // invalidate list cache and cache created snapshot briefly
+    await _cacheService.RemoveAsync("stations:all");
+    await _cacheService.SetAsync($"station:snapshot:{createdStation.StationId}", createdDto, TimeSpan.FromSeconds(15));
+    await _hubContext.Clients.All.SendAsync("StationCreated", createdDto);
 
-        return CreatedAtAction(nameof(GetStation), new { id = createdStation.StationId }, MapToDto(createdStation));
+    return CreatedAtAction(nameof(GetStation), new { id = createdStation.StationId }, createdDto);
     }
 
     [HttpPut("{id}")]
@@ -101,8 +122,13 @@ public class StationsController : ControllerBase
         if (updatedStation == null)
             return NotFound();
 
-        await _hubContext.Clients.All.SendAsync("StationUpdated", MapToDto(updatedStation));
-        return Ok(MapToDto(updatedStation));
+    var dto = MapToDto(updatedStation);
+    // invalidate caches
+    await _cacheService.RemoveAsync("stations:all");
+    await _cacheService.RemoveAsync($"station:snapshot:{id}");
+
+    await _hubContext.Clients.All.SendAsync("StationUpdated", dto);
+    return Ok(dto);
     }
 
     [HttpDelete("{id}")]
@@ -113,8 +139,12 @@ public class StationsController : ControllerBase
         if (!success)
             return NotFound();
 
-        await _hubContext.Clients.All.SendAsync("StationDeleted", id);
-        return NoContent();
+    // invalidate caches
+    await _cacheService.RemoveAsync("stations:all");
+    await _cacheService.RemoveAsync($"station:snapshot:{id}");
+
+    await _hubContext.Clients.All.SendAsync("StationDeleted", id);
+    return NoContent();
     }
 
     [HttpPost("{id}/start-session")]
@@ -125,8 +155,12 @@ public class StationsController : ControllerBase
         if (!success)
             return BadRequest("Could not start session");
 
-        await _hubContext.Clients.All.SendAsync("SessionStarted", id, request.UserId);
-        return Ok();
+    // invalidate/update cache for this station and list
+    await _cacheService.RemoveAsync("stations:all");
+    await _cacheService.RemoveAsync($"station:snapshot:{id}");
+
+    await _hubContext.Clients.All.SendAsync("SessionStarted", id, request.UserId);
+    return Ok();
     }
 
     [HttpPost("{id}/end-session")]
@@ -137,8 +171,12 @@ public class StationsController : ControllerBase
         if (!success)
             return BadRequest("Could not end session");
 
-        await _hubContext.Clients.All.SendAsync("SessionEnded", id);
-        return Ok();
+    // invalidate/update cache for this station and list
+    await _cacheService.RemoveAsync("stations:all");
+    await _cacheService.RemoveAsync($"station:snapshot:{id}");
+
+    await _hubContext.Clients.All.SendAsync("SessionEnded", id);
+    return Ok();
     }
 
     private static StationDto MapToDto(GameStation station)
