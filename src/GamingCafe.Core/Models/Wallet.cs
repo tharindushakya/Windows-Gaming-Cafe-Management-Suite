@@ -22,6 +22,10 @@ public class Wallet
     // Navigation properties
     public virtual User User { get; set; } = null!;
     public virtual ICollection<WalletTransaction> Transactions { get; set; } = new List<WalletTransaction>();
+
+    // Optimistic concurrency token to prevent double-spend/data races on Balance updates
+    [Timestamp]
+    public byte[]? RowVersion { get; set; }
 }
 
 public class WalletTransaction
