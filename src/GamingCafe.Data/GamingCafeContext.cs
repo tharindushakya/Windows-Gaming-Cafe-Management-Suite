@@ -29,6 +29,8 @@ public class GamingCafeContext : DbContext
 
     // Financial
     public DbSet<Transaction> Transactions { get; set; }
+      public DbSet<Wallet> Wallets { get; set; }
+      public DbSet<WalletTransaction> WalletTransactions { get; set; }
 
     // Loyalty Program
     public DbSet<LoyaltyProgram> LoyaltyPrograms { get; set; }
@@ -62,7 +64,11 @@ public class GamingCafeContext : DbContext
             entity.Property(e => e.FirstName).HasMaxLength(100);
             entity.Property(e => e.LastName).HasMaxLength(100);
             entity.Property(e => e.PhoneNumber).HasMaxLength(20);
+            // Legacy per-user wallet balance column remains for compatibility with older migrations.
+            // New canonical wallet model is represented by the Wallet entity.
+#pragma warning disable CS0618 // Obsolete: mapping legacy User.WalletBalance kept for compatibility
             entity.Property(e => e.WalletBalance).HasColumnType("decimal(18,2)");
+#pragma warning restore CS0618
             entity.Property(e => e.Role).HasConversion<int>();
 
             entity.HasIndex(e => e.Username).IsUnique();

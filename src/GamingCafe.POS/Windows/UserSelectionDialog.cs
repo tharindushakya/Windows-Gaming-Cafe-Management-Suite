@@ -4,15 +4,25 @@ using System.Windows.Controls;
 using Microsoft.EntityFrameworkCore;
 using GamingCafe.Core.Models;
 using GamingCafe.Data;
+using System.Linq;
 
 namespace GamingCafe.POS.Windows;
+
+public class UserListItem
+{
+    public int UserId { get; set; }
+    public string Username { get; set; } = string.Empty;
+    public string FirstName { get; set; } = string.Empty;
+    public decimal WalletBalance { get; set; }
+    public UserRole Role { get; set; }
+}
 
 public partial class UserSelectionDialog : Window
 {
     private readonly GamingCafeContext _context;
-    private readonly ObservableCollection<User> _users = new();
+    private readonly ObservableCollection<UserListItem> _users = new();
     
-    public User? SelectedUser { get; private set; }
+    public UserListItem? SelectedUser { get; private set; }
     
     public UserSelectionDialog(GamingCafeContext context)
     {
@@ -53,10 +63,10 @@ public partial class UserSelectionDialog : Window
         
         userListView.SelectionChanged += UserListView_SelectionChanged;
         
-        var gridView = new GridView();
-        gridView.Columns.Add(new GridViewColumn { Header = "Username", DisplayMemberBinding = new System.Windows.Data.Binding("Username"), Width = 120 });
-        gridView.Columns.Add(new GridViewColumn { Header = "Name", DisplayMemberBinding = new System.Windows.Data.Binding("FirstName"), Width = 100 });
-        gridView.Columns.Add(new GridViewColumn { Header = "Wallet", DisplayMemberBinding = new System.Windows.Data.Binding("WalletBalance") { StringFormat = "C" }, Width = 80 });
+    var gridView = new GridView();
+    gridView.Columns.Add(new GridViewColumn { Header = "Username", DisplayMemberBinding = new System.Windows.Data.Binding("Username"), Width = 120 });
+    gridView.Columns.Add(new GridViewColumn { Header = "Name", DisplayMemberBinding = new System.Windows.Data.Binding("FirstName"), Width = 100 });
+    gridView.Columns.Add(new GridViewColumn { Header = "Wallet", DisplayMemberBinding = new System.Windows.Data.Binding("WalletBalance") { StringFormat = "C" }, Width = 80 });
         userListView.View = gridView;
         
         Grid.SetRow(userListView, 1);
@@ -103,14 +113,25 @@ public partial class UserSelectionDialog : Window
         try
         {
             var users = await _context.Users
-                .Where(u => u.IsActive && u.Role != UserRole.Admin)
-                .OrderBy(u => u.Username)
-                .ToListAsync();
-            
-            foreach (var user in users)
-            {
-                _users.Add(user);
-            }
+                    .Where(u => u.IsActive && u.Role != UserRole.Admin)
+                    .OrderBy(u => u.Username)
+                    .ToListAsync();
+
+                var userIds = users.Select(u => u.UserId).ToList();
+                var wallets = await _context.Wallets.Where(w => userIds.Contains(w.UserId)).ToListAsync();
+                var walletMap = wallets.ToDictionary(w => w.UserId, w => w.Balance);
+
+                foreach (var user in users)
+                {
+                    _users.Add(new UserListItem
+                    {
+                        UserId = user.UserId,
+                        Username = user.Username,
+                        FirstName = user.FirstName,
+                        WalletBalance = walletMap.TryGetValue(user.UserId, out var b) ? b : 0m,
+                        Role = user.Role
+                    });
+                }
         }
         catch (Exception ex)
         {
@@ -123,7 +144,7 @@ public partial class UserSelectionDialog : Window
         if (sender is ListView listView && Tag is Button selectButton)
         {
             selectButton.IsEnabled = listView.SelectedItem != null;
-            SelectedUser = listView.SelectedItem as User;
+            SelectedUser = listView.SelectedItem as UserListItem;
         }
     }
     

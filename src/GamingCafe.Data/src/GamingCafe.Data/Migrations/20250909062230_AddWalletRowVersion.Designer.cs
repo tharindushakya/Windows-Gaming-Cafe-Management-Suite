@@ -3,17 +3,20 @@ using System;
 using GamingCafe.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace GamingCafe.Data.Migrations
+namespace GamingCafe.Data.src.GamingCafe.Data.Migrations
 {
     [DbContext(typeof(GamingCafeContext))]
-    partial class GamingCafeContextModelSnapshot : ModelSnapshot
+    [Migration("20250909062230_AddWalletRowVersion")]
+    partial class AddWalletRowVersion
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

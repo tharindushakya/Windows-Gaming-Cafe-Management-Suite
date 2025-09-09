@@ -389,14 +389,44 @@ public class TransactionsController : ControllerBase
                 _unitOfWork.Repository<Transaction>().Update(originalTransaction);
             }
 
-            // Update user wallet if applicable
+            // Update user wallet if applicable (atomic)
             if (originalTransaction.PaymentMethod == PaymentMethod.Wallet)
             {
-                var user = await _unitOfWork.Repository<User>().GetByIdAsync(originalTransaction.UserId);
-                if (user != null)
+                // Ensure wallet exists
+                var wallet = await _unitOfWork.Repository<Wallet>().FirstOrDefaultAsync(w => w.UserId == originalTransaction.UserId);
+                if (wallet == null)
                 {
-                    user.WalletBalance += request.RefundAmount;
-                    _unitOfWork.Repository<User>().Update(user);
+                    wallet = new Wallet
+                    {
+                        UserId = originalTransaction.UserId,
+                        Balance = 0m,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    await _unitOfWork.Repository<Wallet>().AddAsync(wallet);
+                    await _unitOfWork.SaveChangesAsync();
+                }
+
+                var (success, newBalance) = await _unitOfWork.TryAtomicUpdateWalletBalanceAsync(wallet.WalletId, request.RefundAmount);
+                if (success)
+                {
+                    var wt = new WalletTransaction
+                    {
+                        WalletId = wallet.WalletId,
+                        UserId = wallet.UserId,
+                        Amount = request.RefundAmount,
+                        Type = WalletTransactionType.Credit,
+                        Description = $"Refund for transaction {originalTransaction.TransactionId}",
+                        BalanceBefore = newBalance - request.RefundAmount,
+                        BalanceAfter = newBalance,
+                        TransactionDate = DateTime.UtcNow,
+                        Status = WalletTransactionStatus.Completed
+                    };
+                    await _unitOfWork.Repository<WalletTransaction>().AddAsync(wt);
+                }
+                else
+                {
+                    return Conflict(new { message = "Failed to credit wallet for refund. Please retry." });
                 }
             }
 

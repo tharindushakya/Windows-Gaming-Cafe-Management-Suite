@@ -19,6 +19,57 @@ public class UnitOfWork : IUnitOfWork
         _repositories = new Dictionary<Type, object>();
     }
 
+    /// <summary>
+    /// Attempt to atomically change a wallet balance by delta (positive credit, negative debit) using a single SQL statement.
+    /// Returns true and sets out newBalance when successful, false when the update could not be applied (e.g., insufficient funds).
+    /// This avoids read-modify-write races and is safe for concurrent access.
+    /// </summary>
+    public async Task<(bool Success, decimal NewBalance)> TryAtomicUpdateWalletBalanceAsync(int walletId, decimal delta)
+    {
+        // Use a single SQL UPDATE that conditionally updates when balance check passes (for debits)
+        // For credit (delta > 0) we always update.
+        if (delta >= 0)
+        {
+            var sql = "UPDATE \"Wallets\" SET \"Balance\" = \"Balance\" + @delta, \"UpdatedAt\" = now() WHERE \"WalletId\" = @wid RETURNING \"Balance\";";
+            var newBalance = await ExecuteSqlScalarDecimalAsync(sql, ("delta", delta), ("wid", walletId));
+            if (newBalance.HasValue)
+                return (true, newBalance.Value);
+            return (false, 0m);
+        }
+        else
+        {
+            // Debit: only subtract if sufficient funds
+            var sql = "UPDATE \"Wallets\" SET \"Balance\" = \"Balance\" + @delta, \"UpdatedAt\" = now() WHERE \"WalletId\" = @wid AND \"Balance\" >= @min RETURNING \"Balance\";";
+            var newBalance = await ExecuteSqlScalarDecimalAsync(sql, ("delta", delta), ("wid", walletId), ("min", Math.Abs(delta)));
+            if (newBalance.HasValue)
+                return (true, newBalance.Value);
+            return (false, 0m);
+        }
+    }
+
+    private async Task<decimal?> ExecuteSqlScalarDecimalAsync(string sql, params (string name, object value)[] parameters)
+    {
+        await using var conn = _context.Database.GetDbConnection();
+        if (conn.State != System.Data.ConnectionState.Open)
+            await conn.OpenAsync();
+
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+        foreach (var (name, value) in parameters)
+        {
+            var p = cmd.CreateParameter();
+            p.ParameterName = name;
+            p.Value = value ?? DBNull.Value;
+            cmd.Parameters.Add(p);
+        }
+
+        var result = await cmd.ExecuteScalarAsync();
+        if (result == null || result == DBNull.Value)
+            return null;
+
+        return Convert.ToDecimal(result);
+    }
+
     public IRepository<T> Repository<T>() where T : class
     {
         var type = typeof(T);

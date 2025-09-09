@@ -434,9 +434,30 @@ public class LoyaltyController : ControllerBase
             // Calculate redemption value
             var redemptionValue = request.Points * user.LoyaltyProgram.RedemptionRate;
 
-            // Deduct points and add to wallet
+            // Deduct points
             user.LoyaltyPoints -= request.Points;
-            user.WalletBalance += redemptionValue;
+
+            // Ensure user has a wallet
+            var wallet = await _unitOfWork.Repository<Wallet>().FirstOrDefaultAsync(w => w.UserId == userId);
+            if (wallet == null)
+            {
+                wallet = new Wallet
+                {
+                    UserId = userId,
+                    Balance = 0m,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                await _unitOfWork.Repository<Wallet>().AddAsync(wallet);
+                await _unitOfWork.SaveChangesAsync();
+            }
+
+            // Atomically credit wallet
+            var (success, newBal) = await _unitOfWork.TryAtomicUpdateWalletBalanceAsync(wallet.WalletId, redemptionValue);
+            if (!success)
+            {
+                return Conflict(new { message = "Failed to credit wallet for loyalty redemption. Please retry." });
+            }
 
             // Create transaction record for redemption
             var transaction = new Transaction
@@ -447,7 +468,8 @@ public class LoyaltyController : ControllerBase
                 Type = TransactionType.WalletTopup,
                 PaymentMethod = PaymentMethod.LoyaltyPoints,
                 Status = TransactionStatus.Completed,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                ProcessedAt = DateTime.UtcNow
             };
 
             _unitOfWork.Repository<User>().Update(user);
@@ -461,7 +483,7 @@ public class LoyaltyController : ControllerBase
                 PointsRedeemed = request.Points,
                 RedemptionValue = redemptionValue,
                 RemainingPoints = user.LoyaltyPoints,
-                NewWalletBalance = user.WalletBalance,
+                NewWalletBalance = newBal,
                 TransactionId = transaction.TransactionId,
                 RedeemedAt = DateTime.UtcNow
             };

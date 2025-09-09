@@ -51,9 +51,9 @@ public class DatabaseSeeder
         var staffPassword = Environment.GetEnvironmentVariable("SEED_STAFF_PASSWORD") ?? "<<SEED_STAFF_PASSWORD>>";
         var customerPassword = Environment.GetEnvironmentVariable("SEED_CUSTOMER_PASSWORD") ?? "<<SEED_CUSTOMER_PASSWORD>>";
 
-        var users = new List<User>
+        var users = new List<(User user, decimal initialWallet)>
         {
-            new User
+            (new User
             {
                 Username = "admin",
                 Email = "admin@gamingcafe.com",
@@ -62,10 +62,9 @@ public class DatabaseSeeder
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminPassword),
                 Role = UserRole.Admin,
                 IsActive = true,
-                WalletBalance = 1000.00m,
                 CreatedAt = DateTime.UtcNow
-            },
-            new User
+            }, 1000.00m),
+            (new User
             {
                 Username = "staff1",
                 Email = "staff1@gamingcafe.com",
@@ -74,10 +73,9 @@ public class DatabaseSeeder
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(staffPassword),
                 Role = UserRole.Staff,
                 IsActive = true,
-                WalletBalance = 500.00m,
                 CreatedAt = DateTime.UtcNow
-            },
-            new User
+            }, 500.00m),
+            (new User
             {
                 Username = "customer1",
                 Email = "customer1@example.com",
@@ -86,10 +84,9 @@ public class DatabaseSeeder
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(customerPassword),
                 Role = UserRole.Customer,
                 IsActive = true,
-                WalletBalance = 50.00m,
                 CreatedAt = DateTime.UtcNow
-            },
-            new User
+            }, 50.00m),
+            (new User
             {
                 Username = "customer2",
                 Email = "customer2@example.com",
@@ -98,13 +95,26 @@ public class DatabaseSeeder
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(customerPassword),
                 Role = UserRole.Customer,
                 IsActive = true,
-                WalletBalance = 75.00m,
                 CreatedAt = DateTime.UtcNow
-            }
+            }, 75.00m)
         };
 
-        await _context.Users.AddRangeAsync(users);
-        _logger.LogInformation("Seeded {Count} users", users.Count);
+        foreach (var (user, initialWallet) in users)
+        {
+            await _context.Users.AddAsync(user);
+            // create wallet record for the user
+            var wallet = new Wallet
+            {
+                User = user,
+                Balance = initialWallet,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            await _context.AddAsync(wallet);
+        }
+
+        _logger.LogInformation("Seeded {Count} users and wallets", users.Count);
     }
 
     private async Task SeedGameStationsAsync()

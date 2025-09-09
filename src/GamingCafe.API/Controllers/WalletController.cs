@@ -122,10 +122,32 @@ public class WalletController : ControllerBase
             if (!wallet.IsActive)
                 return BadRequest("Wallet is inactive");
 
-            // Update wallet balance
-            var oldBalance = wallet.Balance;
-            wallet.Balance += request.Amount;
-            wallet.UpdatedAt = DateTime.UtcNow;
+            // Attempt atomic update with retries to avoid concurrency issues
+            const int maxAttempts = 3;
+            int attempt = 0;
+            bool updated = false;
+            decimal newBalance = 0m;
+
+            while (attempt < maxAttempts && !updated)
+            {
+                attempt++;
+                var res = await _unitOfWork.TryAtomicUpdateWalletBalanceAsync(wallet.WalletId, request.Amount);
+                if (res.Success)
+                {
+                    updated = true;
+                    newBalance = res.NewBalance;
+                }
+                else
+                {
+                    // small backoff
+                    await Task.Delay(50 * attempt);
+                }
+            }
+
+            if (!updated)
+            {
+                return Conflict(new { message = "Failed to update wallet balance due to concurrent modifications. Please retry." });
+            }
 
             // Create wallet transaction
             var transaction = new WalletTransaction
@@ -134,15 +156,14 @@ public class WalletController : ControllerBase
                 Type = WalletTransactionType.Deposit,
                 Amount = request.Amount,
                 Description = request.Description ?? "Wallet deposit",
-                BalanceBefore = oldBalance,
-                BalanceAfter = wallet.Balance,
+                BalanceBefore = newBalance - request.Amount,
+                BalanceAfter = newBalance,
                 PaymentMethod = request.PaymentMethod ?? "Cash",
                 ProcessedBy = GetCurrentUserId().ToString(),
                 TransactionDate = DateTime.UtcNow,
                 Status = WalletTransactionStatus.Completed
             };
 
-            _unitOfWork.Repository<Wallet>().Update(wallet);
             await _unitOfWork.Repository<WalletTransaction>().AddAsync(transaction);
             await _unitOfWork.SaveChangesAsync();
 
@@ -198,13 +219,32 @@ public class WalletController : ControllerBase
             if (!wallet.IsActive)
                 return BadRequest("Wallet is inactive");
 
-            if (wallet.Balance < request.Amount)
-                return BadRequest("Insufficient funds");
+            // Attempt atomic debit with retries
+            const int maxAttemptsWithdraw = 3;
+            int attemptW = 0;
+            bool withdrew = false;
+            decimal newBal = 0m;
 
-            // Update wallet balance
-            var oldBalance = wallet.Balance;
-            wallet.Balance -= request.Amount;
-            wallet.UpdatedAt = DateTime.UtcNow;
+            while (attemptW < maxAttemptsWithdraw && !withdrew)
+            {
+                attemptW++;
+                var res = await _unitOfWork.TryAtomicUpdateWalletBalanceAsync(wallet.WalletId, -request.Amount);
+                if (res.Success)
+                {
+                    withdrew = true;
+                    newBal = res.NewBalance;
+                }
+                else
+                {
+                    // insufficient funds or concurrent change
+                    await Task.Delay(50 * attemptW);
+                }
+            }
+
+            if (!withdrew)
+            {
+                return Conflict(new { message = "Failed to withdraw: insufficient funds or concurrent update. Please retry." });
+            }
 
             // Create wallet transaction
             var transaction = new WalletTransaction
@@ -213,15 +253,14 @@ public class WalletController : ControllerBase
                 Type = WalletTransactionType.Withdrawal,
                 Amount = request.Amount,
                 Description = request.Description ?? "Wallet withdrawal",
-                BalanceBefore = oldBalance,
-                BalanceAfter = wallet.Balance,
+                BalanceBefore = newBal + request.Amount,
+                BalanceAfter = newBal,
                 PaymentMethod = request.PaymentMethod ?? "Cash",
                 ProcessedBy = GetCurrentUserId().ToString(),
                 TransactionDate = DateTime.UtcNow,
                 Status = WalletTransactionStatus.Completed
             };
 
-            _unitOfWork.Repository<Wallet>().Update(wallet);
             await _unitOfWork.Repository<WalletTransaction>().AddAsync(transaction);
             await _unitOfWork.SaveChangesAsync();
 
@@ -284,51 +323,89 @@ public class WalletController : ControllerBase
             if (!fromWallet.IsActive || !toWallet.IsActive)
                 return BadRequest("One or both wallets are inactive");
 
-            if (fromWallet.Balance < request.Amount)
-                return BadRequest("Insufficient funds in source wallet");
+            // For transfers, perform atomic debit from source then atomic credit to destination with retries
+            const int maxAttemptsTransfer = 3;
+            int attemptT = 0;
+            bool debited = false;
+            decimal fromNewBal = 0m;
+            decimal fromOldBalance = fromWallet.Balance;
+            decimal toOldBalance = toWallet.Balance;
 
-            // Update wallet balances
-            var fromOldBalance = fromWallet.Balance;
-            var toOldBalance = toWallet.Balance;
+            while (attemptT < maxAttemptsTransfer && !debited)
+            {
+                attemptT++;
+                var res = await _unitOfWork.TryAtomicUpdateWalletBalanceAsync(fromWallet.WalletId, -request.Amount);
+                if (res.Success)
+                {
+                    debited = true;
+                    fromNewBal = res.NewBalance;
+                }
+                else
+                {
+                    await Task.Delay(50 * attemptT);
+                }
+            }
 
-            fromWallet.Balance -= request.Amount;
-            toWallet.Balance += request.Amount;
+            if (!debited)
+            {
+                return Conflict(new { message = "Failed to debit source wallet due to insufficient funds or concurrent updates. Please retry." });
+            }
 
-            fromWallet.UpdatedAt = DateTime.UtcNow;
-            toWallet.UpdatedAt = DateTime.UtcNow;
+            // Credit destination - this should almost never fail, but retry if needed
+            bool credited = false;
+            decimal toNewBal = 0m;
+            int attemptC = 0;
+            while (attemptC < maxAttemptsTransfer && !credited)
+            {
+                attemptC++;
+                var res = await _unitOfWork.TryAtomicUpdateWalletBalanceAsync(toWallet.WalletId, request.Amount);
+                if (res.Success)
+                {
+                    credited = true;
+                    toNewBal = res.NewBalance;
+                }
+                else
+                {
+                    await Task.Delay(50 * attemptC);
+                }
+            }
 
-            // Create debit transaction for sender
+            if (!credited)
+            {
+                // Attempt to rollback debit
+                await _unitOfWork.TryAtomicUpdateWalletBalanceAsync(fromWallet.WalletId, request.Amount);
+                return Conflict(new { message = "Failed to credit destination wallet; debit rolled back. Please retry." });
+            }
+
+            // Record transactions
             var debitTransaction = new WalletTransaction
             {
                 WalletId = fromWallet.WalletId,
                 Type = WalletTransactionType.Transfer,
                 Amount = request.Amount,
                 Description = $"Transfer to {toUser.Username}: {request.Description}",
-                BalanceBefore = fromOldBalance,
-                BalanceAfter = fromWallet.Balance,
+                BalanceBefore = fromNewBal + request.Amount,
+                BalanceAfter = fromNewBal,
                 ProcessedBy = GetCurrentUserId().ToString(),
                 TransactionDate = DateTime.UtcNow,
                 Status = WalletTransactionStatus.Completed,
                 RelatedUserId = request.ToUserId
             };
 
-            // Create credit transaction for receiver
             var creditTransaction = new WalletTransaction
             {
                 WalletId = toWallet.WalletId,
                 Type = WalletTransactionType.Transfer,
                 Amount = request.Amount,
                 Description = $"Transfer from {fromUser.Username}: {request.Description}",
-                BalanceBefore = toOldBalance,
-                BalanceAfter = toWallet.Balance,
+                BalanceBefore = toNewBal - request.Amount,
+                BalanceAfter = toNewBal,
                 ProcessedBy = GetCurrentUserId().ToString(),
                 TransactionDate = DateTime.UtcNow,
                 Status = WalletTransactionStatus.Completed,
                 RelatedUserId = request.FromUserId
             };
 
-            _unitOfWork.Repository<Wallet>().Update(fromWallet);
-            _unitOfWork.Repository<Wallet>().Update(toWallet);
             await _unitOfWork.Repository<WalletTransaction>().AddAsync(debitTransaction);
             await _unitOfWork.Repository<WalletTransaction>().AddAsync(creditTransaction);
             await _unitOfWork.SaveChangesAsync();

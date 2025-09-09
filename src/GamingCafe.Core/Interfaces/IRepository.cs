@@ -16,4 +16,7 @@ public interface IUnitOfWork : IDisposable
 {
     IRepository<T> Repository<T>() where T : class;
     Task<int> SaveChangesAsync();
+    
+    // Attempt to atomically update a wallet balance by delta (positive credit, negative debit).
+    Task<(bool Success, decimal NewBalance)> TryAtomicUpdateWalletBalanceAsync(int walletId, decimal delta);
 }

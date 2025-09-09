@@ -5,6 +5,7 @@ using GamingCafe.API.Services;
 using GamingCafe.Core.Models;
 using GamingCafe.Core.DTOs;
 using GamingCafe.Core.Interfaces.Services;
+using GamingCafe.Core.Interfaces;
 
 namespace GamingCafe.API.Controllers;
 
@@ -13,10 +14,12 @@ namespace GamingCafe.API.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly IUnitOfWork _unitOfWork;
 
-    public AuthController(IAuthService authService)
+    public AuthController(IAuthService authService, IUnitOfWork unitOfWork)
     {
         _authService = authService;
+        _unitOfWork = unitOfWork;
     }
 
     [HttpPost("login")]
@@ -118,6 +121,9 @@ public class AuthController : ControllerBase
         if (user == null)
             return NotFound();
 
+        // Read canonical wallet balance from Wallet table
+        var wallet = await _unitOfWork.Repository<GamingCafe.Core.Models.Wallet>().FirstOrDefaultAsync(w => w.UserId == user.UserId);
+
         return Ok(new UserDto
         {
             UserId = user.UserId,
@@ -126,7 +132,7 @@ public class AuthController : ControllerBase
             FirstName = user.FirstName,
             LastName = user.LastName,
             Role = user.Role.ToString(),
-            WalletBalance = user.WalletBalance,
+            WalletBalance = wallet?.Balance ?? 0m,
             LoyaltyPoints = user.LoyaltyPoints
         });
     }

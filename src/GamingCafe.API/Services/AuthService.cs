@@ -135,17 +135,17 @@ public class AuthService : IAuthService
                     RequiresTwoFactor = true,
                     TwoFactorToken = twoFactorToken,
                     User = new UserDto
-                    {
-                        UserId = user.UserId,
-                        Username = user.Username,
-                        Email = user.Email,
-                        FirstName = user.FirstName,
-                        LastName = user.LastName,
-                        Role = user.Role,
-                        WalletBalance = user.WalletBalance,
-                        LoyaltyPoints = user.LoyaltyPoints,
-                        IsTwoFactorEnabled = user.IsTwoFactorEnabled
-                    }
+                        {
+                            UserId = user.UserId,
+                            Username = user.Username,
+                            Email = user.Email,
+                            FirstName = user.FirstName,
+                            LastName = user.LastName,
+                            Role = user.Role,
+                            WalletBalance = (await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == user.UserId))?.Balance ?? 0m,
+                            LoyaltyPoints = user.LoyaltyPoints,
+                            IsTwoFactorEnabled = user.IsTwoFactorEnabled
+                        }
                 };
             }
 
@@ -214,7 +214,7 @@ public class AuthService : IAuthService
                 FirstName = user.FirstName,
                 LastName = user.LastName,
                 Role = user.Role,
-                WalletBalance = user.WalletBalance,
+                WalletBalance = (await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == user.UserId))?.Balance ?? 0m,
                 LoyaltyPoints = user.LoyaltyPoints,
                 IsTwoFactorEnabled = user.IsTwoFactorEnabled
             }

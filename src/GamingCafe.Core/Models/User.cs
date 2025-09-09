@@ -48,6 +48,7 @@ public class User
     public string? TwoFactorRecoveryCode { get; set; }
 
     // Wallet and Loyalty
+    [Obsolete("Use the Wallet entity (Wallets table) as the canonical source of truth for balances. This property is kept for backward compatibility.")]
     public decimal WalletBalance { get; set; } = 0;
     public int LoyaltyPoints { get; set; } = 0;
     public DateTime? MembershipExpiryDate { get; set; }

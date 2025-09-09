@@ -79,13 +79,22 @@ public class UsersController : ControllerBase
                     DateOfBirth = u.DateOfBirth,
                     Role = u.Role.ToString(),
                     IsActive = u.IsActive,
-                    WalletBalance = u.WalletBalance,
+                    WalletBalance = 0m, // will populate below from Wallet table
                     LoyaltyPoints = u.LoyaltyPoints,
                     MembershipExpiryDate = u.MembershipExpiryDate,
                     LastLoginAt = u.LastLoginAt,
                     CreatedAt = u.CreatedAt
                 })
                 .ToList();
+
+            // Populate wallet balances in a single query to avoid N+1
+            var userIds = pagedUsers.Select(u => u.UserId).ToList();
+            var wallets = (await _unitOfWork.Repository<Wallet>().FindAsync(w => userIds.Contains(w.UserId))).ToList();
+            var walletMap = wallets.ToDictionary(w => w.UserId, w => w.Balance);
+            foreach (var ud in pagedUsers)
+            {
+                ud.WalletBalance = walletMap.TryGetValue(ud.UserId, out var b) ? b : 0m;
+            }
 
             var response = new PagedResponse<UserDto>
             {
@@ -115,6 +124,7 @@ public class UsersController : ControllerBase
             if (user == null)
                 return NotFound($"User with ID {id} not found");
 
+            var wallet = await _unitOfWork.Repository<Wallet>().FirstOrDefaultAsync(w => w.UserId == user.UserId);
             var userDto = new UserDto
             {
                 UserId = user.UserId,
@@ -126,7 +136,7 @@ public class UsersController : ControllerBase
                 DateOfBirth = user.DateOfBirth,
                 Role = user.Role.ToString(),
                 IsActive = user.IsActive,
-                WalletBalance = user.WalletBalance,
+                WalletBalance = wallet?.Balance ?? 0m,
                 LoyaltyPoints = user.LoyaltyPoints,
                 MembershipExpiryDate = user.MembershipExpiryDate,
                 LastLoginAt = user.LastLoginAt,
@@ -175,12 +185,24 @@ public class UsersController : ControllerBase
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
                 Role = Enum.Parse<UserRole>(request.Role),
                 IsActive = true,
-                WalletBalance = request.InitialWalletBalance ?? 0.00m,
                 LoyaltyPoints = 0,
                 CreatedAt = DateTime.UtcNow
             };
 
             await _unitOfWork.Repository<User>().AddAsync(user);
+            await _unitOfWork.SaveChangesAsync();
+
+            // Create a Wallet record for the new user using the provided initial balance
+            var initialBal = request.InitialWalletBalance ?? 0.00m;
+            var wallet = new Wallet
+            {
+                UserId = user.UserId,
+                Balance = initialBal,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            await _unitOfWork.Repository<Wallet>().AddAsync(wallet);
             await _unitOfWork.SaveChangesAsync();
 
             var userDto = new UserDto
@@ -194,7 +216,7 @@ public class UsersController : ControllerBase
                 DateOfBirth = user.DateOfBirth,
                 Role = user.Role.ToString(),
                 IsActive = user.IsActive,
-                WalletBalance = user.WalletBalance,
+                WalletBalance = wallet?.Balance ?? 0m,
                 LoyaltyPoints = user.LoyaltyPoints,
                 MembershipExpiryDate = user.MembershipExpiryDate,
                 LastLoginAt = user.LastLoginAt,
@@ -254,6 +276,22 @@ public class UsersController : ControllerBase
             _unitOfWork.Repository<User>().Update(user);
             await _unitOfWork.SaveChangesAsync();
 
+            // Ensure a Wallet record exists for the user (do not use InitialWalletBalance on update)
+            var wallet = await _unitOfWork.Repository<Wallet>().FirstOrDefaultAsync(w => w.UserId == user.UserId);
+            if (wallet == null)
+            {
+                wallet = new Wallet
+                {
+                    UserId = user.UserId,
+                    Balance = 0m,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                await _unitOfWork.Repository<Wallet>().AddAsync(wallet);
+                await _unitOfWork.SaveChangesAsync();
+            }
+
             var userDto = new UserDto
             {
                 UserId = user.UserId,
@@ -265,7 +303,7 @@ public class UsersController : ControllerBase
                 DateOfBirth = user.DateOfBirth,
                 Role = user.Role.ToString(),
                 IsActive = user.IsActive,
-                WalletBalance = user.WalletBalance,
+                WalletBalance = wallet.Balance,
                 LoyaltyPoints = user.LoyaltyPoints,
                 MembershipExpiryDate = user.MembershipExpiryDate,
                 LastLoginAt = user.LastLoginAt,
@@ -369,18 +407,38 @@ public class UsersController : ControllerBase
             if (request.Amount <= 0)
                 return BadRequest("Amount must be greater than zero");
 
-            user.WalletBalance += request.Amount;
-            _unitOfWork.Repository<User>().Update(user);
-
             // Create wallet transaction record
+            // Ensure wallet exists (we avoid updating User.WalletBalance; Wallet is canonical)
+            var walletRec = await _unitOfWork.Repository<Wallet>().FirstOrDefaultAsync(w => w.UserId == id);
+            if (walletRec == null)
+            {
+                walletRec = new Wallet
+                {
+                    UserId = id,
+                    Balance = 0m,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                await _unitOfWork.Repository<Wallet>().AddAsync(walletRec);
+                await _unitOfWork.SaveChangesAsync();
+            }
+
+            var (success, newBal) = await _unitOfWork.TryAtomicUpdateWalletBalanceAsync(walletRec.WalletId, request.Amount);
+            if (!success)
+                return Conflict(new { message = "Failed to credit wallet. Please retry." });
+
             var walletTransaction = new WalletTransaction
             {
+                WalletId = walletRec.WalletId,
                 UserId = id,
                 Amount = request.Amount,
                 Type = WalletTransactionType.Credit,
                 Description = request.Description ?? "Wallet top-up",
-                Reference = $"TOPUP-{DateTime.UtcNow:yyyyMMddHHmmss}",
-                CreatedAt = DateTime.UtcNow
+                ReferenceNumber = $"TOPUP-{DateTime.UtcNow:yyyyMMddHHmmss}",
+                BalanceBefore = newBal - request.Amount,
+                BalanceAfter = newBal,
+                TransactionDate = DateTime.UtcNow,
+                Status = WalletTransactionStatus.Completed
             };
 
             await _unitOfWork.Repository<WalletTransaction>().AddAsync(walletTransaction);
@@ -401,7 +459,7 @@ public class UsersController : ControllerBase
             await _unitOfWork.SaveChangesAsync();
 
             _logger.LogInformation("Added {Amount} to wallet for user {UserId}", request.Amount, id);
-            return Ok(new { WalletBalance = user.WalletBalance });
+            return Ok(new { WalletBalance = newBal });
         }
         catch (Exception ex)
         {
@@ -426,28 +484,38 @@ public class UsersController : ControllerBase
             if (request.Amount <= 0)
                 return BadRequest("Amount must be greater than zero");
 
-            if (user.WalletBalance < request.Amount)
+            // Ensure wallet exists
+            var walletRec = await _unitOfWork.Repository<Wallet>().FirstOrDefaultAsync(w => w.UserId == id);
+            if (walletRec == null)
+            {
                 return BadRequest("Insufficient wallet balance");
+            }
 
-            user.WalletBalance -= request.Amount;
-            _unitOfWork.Repository<User>().Update(user);
+            var (success, newBal) = await _unitOfWork.TryAtomicUpdateWalletBalanceAsync(walletRec.WalletId, -request.Amount);
+            if (!success)
+            {
+                return BadRequest("Insufficient wallet balance or failed to deduct");
+            }
 
-            // Create wallet transaction record
             var walletTransaction = new WalletTransaction
             {
+                WalletId = walletRec.WalletId,
                 UserId = id,
                 Amount = request.Amount,
                 Type = WalletTransactionType.Debit,
                 Description = request.Description ?? "Wallet deduction",
-                Reference = $"DEBIT-{DateTime.UtcNow:yyyyMMddHHmmss}",
-                CreatedAt = DateTime.UtcNow
+                ReferenceNumber = $"DEBIT-{DateTime.UtcNow:yyyyMMddHHmmss}",
+                BalanceBefore = newBal + request.Amount,
+                BalanceAfter = newBal,
+                TransactionDate = DateTime.UtcNow,
+                Status = WalletTransactionStatus.Completed
             };
 
             await _unitOfWork.Repository<WalletTransaction>().AddAsync(walletTransaction);
             await _unitOfWork.SaveChangesAsync();
 
             _logger.LogInformation("Deducted {Amount} from wallet for user {UserId}", request.Amount, id);
-            return Ok(new { WalletBalance = user.WalletBalance });
+            return Ok(new { WalletBalance = newBal });
         }
         catch (Exception ex)
         {

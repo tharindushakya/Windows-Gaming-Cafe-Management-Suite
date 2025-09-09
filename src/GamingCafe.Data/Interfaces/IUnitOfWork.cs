@@ -22,4 +22,7 @@ public interface IUnitOfWork : IDisposable
     Task<bool> DatabaseExistsAsync();
     Task EnsureDatabaseCreatedAsync();
     Task MigrateDatabaseAsync();
+    
+    // Attempt to atomically update a wallet balance by delta (positive credit, negative debit).
+    Task<(bool Success, decimal NewBalance)> TryAtomicUpdateWalletBalanceAsync(int walletId, decimal delta);
 }
