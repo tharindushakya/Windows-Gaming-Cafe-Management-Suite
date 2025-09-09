@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using GamingCafe.Core.Interfaces;
+using GamingCafe.Core;
 
 namespace GamingCafe.Data.Repositories;
 
@@ -26,24 +27,52 @@ public class UnitOfWork : IUnitOfWork
     /// </summary>
     public async Task<(bool Success, decimal NewBalance)> TryAtomicUpdateWalletBalanceAsync(int walletId, decimal delta)
     {
-        // Use a single SQL UPDATE that conditionally updates when balance check passes (for debits)
-        // For credit (delta > 0) we always update.
-        if (delta >= 0)
+        // Observe and trace the wallet update operation
+        Observability.WalletUpdateCounter.Add(1);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        using (var activity = Observability.ActivitySource.StartActivity("TryAtomicUpdateWalletBalance", System.Diagnostics.ActivityKind.Internal))
         {
-            var sql = "UPDATE \"Wallets\" SET \"Balance\" = \"Balance\" + @delta, \"UpdatedAt\" = now() WHERE \"WalletId\" = @wid RETURNING \"Balance\";";
-            var newBalance = await ExecuteSqlScalarDecimalAsync(sql, ("delta", delta), ("wid", walletId));
-            if (newBalance.HasValue)
-                return (true, newBalance.Value);
-            return (false, 0m);
-        }
-        else
-        {
-            // Debit: only subtract if sufficient funds
-            var sql = "UPDATE \"Wallets\" SET \"Balance\" = \"Balance\" + @delta, \"UpdatedAt\" = now() WHERE \"WalletId\" = @wid AND \"Balance\" >= @min RETURNING \"Balance\";";
-            var newBalance = await ExecuteSqlScalarDecimalAsync(sql, ("delta", delta), ("wid", walletId), ("min", Math.Abs(delta)));
-            if (newBalance.HasValue)
-                return (true, newBalance.Value);
-            return (false, 0m);
+            activity?.SetTag("wallet.id", walletId);
+            activity?.SetTag("wallet.delta", delta);
+
+            // Use a single SQL UPDATE that conditionally updates when balance check passes (for debits)
+            // For credit (delta > 0) we always update.
+            if (delta >= 0)
+            {
+                var sql = "UPDATE \"Wallets\" SET \"Balance\" = \"Balance\" + @delta, \"UpdatedAt\" = now() WHERE \"WalletId\" = @wid RETURNING \"Balance\";";
+                var newBalance = await ExecuteSqlScalarDecimalAsync(sql, ("delta", delta), ("wid", walletId));
+                if (newBalance.HasValue)
+                {
+                    Observability.WalletUpdateSuccessCounter.Add(1);
+                    activity?.SetTag("wallet.result", "success");
+                    sw.Stop();
+                    Observability.WalletUpdateDuration.Record(sw.Elapsed.TotalMilliseconds);
+                    return (true, newBalance.Value);
+                }
+                activity?.SetTag("wallet.result", "failed");
+                sw.Stop();
+                Observability.WalletUpdateDuration.Record(sw.Elapsed.TotalMilliseconds);
+                return (false, 0m);
+            }
+            else
+            {
+                // Debit: only subtract if sufficient funds
+                var sql = "UPDATE \"Wallets\" SET \"Balance\" = \"Balance\" + @delta, \"UpdatedAt\" = now() WHERE \"WalletId\" = @wid AND \"Balance\" >= @min RETURNING \"Balance\";";
+                var newBalance = await ExecuteSqlScalarDecimalAsync(sql, ("delta", delta), ("wid", walletId), ("min", Math.Abs(delta)));
+                if (newBalance.HasValue)
+                {
+                    Observability.WalletUpdateSuccessCounter.Add(1);
+                    activity?.SetTag("wallet.result", "success");
+                    sw.Stop();
+                    Observability.WalletUpdateDuration.Record(sw.Elapsed.TotalMilliseconds);
+                    return (true, newBalance.Value);
+                }
+                activity?.SetTag("wallet.result", "failed");
+                sw.Stop();
+                Observability.WalletUpdateDuration.Record(sw.Elapsed.TotalMilliseconds);
+                return (false, 0m);
+            }
         }
     }
 

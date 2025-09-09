@@ -50,6 +50,9 @@ namespace GamingCafe.API.Background
             var payload = (workItem, maxRetries, scheduled);
             try
             {
+                using var activity = GamingCafe.Core.Observability.ActivitySource.StartActivity("BackgroundTaskQueue.Enqueue", System.Diagnostics.ActivityKind.Internal);
+                activity?.SetTag("background.priority", priority.ToString());
+                activity?.SetTag("background.scheduled", scheduled?.ToString() ?? string.Empty);
                 bool written = priority switch
                 {
                     Core.Interfaces.Background.BackgroundPriority.High => _high.Writer.TryWrite(payload),

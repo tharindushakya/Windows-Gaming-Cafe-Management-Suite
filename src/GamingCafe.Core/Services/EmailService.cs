@@ -5,6 +5,9 @@ using System.Net;
 using System.Text.RegularExpressions;
 using System.Text;
 using GamingCafe.Core.Interfaces.Services;
+using Polly;
+using Polly.Retry;
+using Polly.Timeout;
 using GamingCafe.Core.Interfaces.Background;
 using GamingCafe.Core.Models.Email;
 
@@ -51,7 +54,30 @@ public class EmailService : IEmailService
                 using var smtpClient = CreateSmtpClient();
                 using var mailMessage = CreateMailMessage(emailMessage);
 
-                await smtpClient.SendMailAsync(mailMessage, cancellationToken);
+                // Define a timeout policy for the SMTP send operation
+                var timeoutPolicy = Policy.TimeoutAsync(TimeSpan.FromMilliseconds(_smtpConfig.TimeoutMs), TimeoutStrategy.Pessimistic);
+
+                // Retry policy with exponential backoff and jitter
+                var retryPolicy = Policy.Handle<Exception>()
+                    .WaitAndRetryAsync(new[] {
+                        TimeSpan.FromMilliseconds(200),
+                        TimeSpan.FromMilliseconds(500),
+                        TimeSpan.FromMilliseconds(1000)
+                    }, (exception, timeSpan, retryCount, context) =>
+                    {
+                        _logger.LogWarning(exception, "Retry {RetryCount} sending email after {Delay}ms due to error", retryCount, timeSpan.TotalMilliseconds);
+                    });
+
+                // Combine policies: retry around a timeout
+                var policyWrap = Policy.WrapAsync(retryPolicy, timeoutPolicy);
+
+                await policyWrap.ExecuteAsync(async ct =>
+                {
+                    using var activity = Observability.ActivitySource.StartActivity("EmailService.SendMail", System.Diagnostics.ActivityKind.Internal);
+                    activity?.SetTag("email.to", string.Join(',', emailMessage.To.Select(x => x.Address)));
+                    activity?.SetTag("email.subject", emailMessage.Subject);
+                    await smtpClient.SendMailAsync(mailMessage, ct);
+                }, cancellationToken);
 
                 var result = EmailResult.Success(emailMessage.MessageId);
                 RecordEmailResult(result);

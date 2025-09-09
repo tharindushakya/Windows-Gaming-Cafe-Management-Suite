@@ -237,35 +237,88 @@ public class AuthService : IAuthService
 
         var incomingHash = ComputeHash(request.RefreshToken);
 
-        var tokenEntity = await _context.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == incomingHash);
+        // Ensure token belongs to this user
+        var tokenEntity = await _context.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == incomingHash && t.UserId == user.UserId);
         if (tokenEntity == null || tokenEntity.RevokedAt != null || tokenEntity.ExpiresAt <= DateTime.UtcNow)
         {
             // Possible token reuse or invalid token. Revoke all user's tokens as a precaution.
             var userTokens = _context.RefreshTokens.Where(t => t.UserId == user.UserId && t.RevokedAt == null);
             await userTokens.ForEachAsync(t => t.RevokedAt = DateTime.UtcNow);
             await _context.SaveChangesAsync();
+
+            // Emit metric for reuse detection
+            try { GamingCafe.Core.Observability.RefreshTokenReuseCounter.Add(1); } catch { }
+
+            // Audit the reuse detection if audit service is available
+            try
+            {
+                var audit = _serviceProvider.GetService<GamingCafe.Core.Interfaces.Services.IAuditService>();
+                if (audit != null)
+                {
+                    await audit.LogActionAsync("RefreshTokenReuseDetected", user.UserId, System.Text.Json.JsonSerializer.Serialize(new { TokenHash = incomingHash, Ip = request.IpAddress, DeviceInfo = request.DeviceInfo }));
+                }
+                else
+                {
+                    var logger = _serviceProvider.GetService<Microsoft.Extensions.Logging.ILogger<AuthService>>();
+                    logger?.LogWarning("Refresh token reuse detected for user {UserId}", user.UserId);
+                }
+            }
+            catch { }
+
             return null;
         }
 
-        // Rotation: create a new token and mark the old as replaced/revoked
+        // Perform atomic rotation using a transaction and a conditional update to avoid race conditions
         var newRawToken = GenerateRefreshToken();
         var newHash = ComputeHash(newRawToken);
+        var newTokenId = Guid.NewGuid();
 
-        var newTokenEntity = new GamingCafe.Core.Models.RefreshToken
+        await using var tx = await _context.Database.BeginTransactionAsync();
+        try
         {
-            UserId = user.UserId,
-            TokenHash = newHash,
-            ExpiresAt = DateTime.UtcNow.AddDays(7),
-            IpAddress = request.IpAddress ?? tokenEntity.IpAddress,
-            DeviceInfo = request.DeviceInfo ?? tokenEntity.DeviceInfo
-        };
+            // Conditional update: only revoke the token if it is still active (RevokedAt IS NULL)
+            var rows = await _context.Database.ExecuteSqlRawAsync(
+                "UPDATE \"RefreshTokens\" SET \"RevokedAt\" = now(), \"ReplacedByTokenId\" = {0} WHERE \"TokenId\" = {1} AND \"RevokedAt\" IS NULL;",
+                newTokenId, tokenEntity.TokenId);
 
-        tokenEntity.RevokedAt = DateTime.UtcNow;
-        tokenEntity.ReplacedByTokenId = newTokenEntity.TokenId;
+            if (rows != 1)
+            {
+                // Someone else used/revoked the token concurrently: treat as reuse
+                await tx.RollbackAsync();
 
-        _context.RefreshTokens.Add(newTokenEntity);
-        await _context.SaveChangesAsync();
+                var userTokens = _context.RefreshTokens.Where(t => t.UserId == user.UserId && t.RevokedAt == null);
+                await userTokens.ForEachAsync(t => t.RevokedAt = DateTime.UtcNow);
+                await _context.SaveChangesAsync();
 
+                // Emit metric for reuse detection
+                try { GamingCafe.Core.Observability.RefreshTokenReuseCounter.Add(1); } catch { }
+
+                try
+                {
+                    var audit = _serviceProvider.GetService<GamingCafe.Core.Interfaces.Services.IAuditService>();
+                    if (audit != null)
+                    {
+                        await audit.LogActionAsync("RefreshTokenReuseDetected", user.UserId, System.Text.Json.JsonSerializer.Serialize(new { TokenHash = incomingHash, Ip = request.IpAddress, DeviceInfo = request.DeviceInfo }));
+                    }
+                }
+                catch { }
+
+                return null;
+            }
+
+            // Insert new token row
+            var insertSql = "INSERT INTO \"RefreshTokens\" (\"TokenId\", \"UserId\", \"TokenHash\", \"DeviceInfo\", \"IpAddress\", \"CreatedAt\", \"ExpiresAt\") VALUES ({0}, {1}, {2}, {3}, {4}, now(), {5});";
+            await _context.Database.ExecuteSqlRawAsync(insertSql, newTokenId, user.UserId, newHash, (object?)request.DeviceInfo ?? DBNull.Value, (object?)request.IpAddress ?? DBNull.Value, DateTime.UtcNow.AddDays(7));
+
+            await tx.CommitAsync();
+        }
+        catch
+        {
+            await tx.RollbackAsync();
+            throw;
+        }
+
+        // Return new access + refresh token
         var newAccessToken = GenerateJwtToken(user);
 
         return new RefreshTokenResponse

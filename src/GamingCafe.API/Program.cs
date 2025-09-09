@@ -24,12 +24,45 @@ using Asp.Versioning;
 // OpenTelemetry instrumentation was attempted but reverted to avoid package conflicts; use internal /metrics endpoint instead if needed.
 using FluentValidation;
 using FluentValidation.AspNetCore;
+using Polly;
+using Polly.Extensions.Http;
+using Polly.Timeout;
+using System.Net.Http;
 using GamingCafe.Core.Interfaces.Services;
 using GamingCafe.Core.Services;
 using StackExchange.Redis;
 using GamingCafe.Core.Authorization;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Exporter;
+using OpenTelemetry.Instrumentation.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure OpenTelemetry tracing and metrics with conservative defaults
+var otelCollectorEndpoint = builder.Configuration["OpenTelemetry:Collector:Endpoint"] ?? "http://localhost:4317";
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracerProviderBuilder =>
+    {
+        tracerProviderBuilder
+            .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(builder.Environment.ApplicationName ?? "GamingCafe.API"))
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddEntityFrameworkCoreInstrumentation() // instrument EF Core
+            .AddSource("GamingCafe.App")
+            .AddOtlpExporter(opt =>
+            {
+                // Endpoint configured via OpenTelemetry:Collector:Endpoint (HTTP/GRPC OTLP)
+                opt.Endpoint = new Uri(otelCollectorEndpoint);
+            });
+    })
+    .WithMetrics(meterProviderBuilder =>
+    {
+        meterProviderBuilder
+            .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(builder.Environment.ApplicationName ?? "GamingCafe.API"))
+            .AddPrometheusExporter();
+    });
 
 // Configure Serilog: initialize a default logger and attach it to the Host. This ensures
 // structured diagnostics are available early. Configuration will override these defaults.
@@ -67,7 +100,9 @@ builder.Services.AddApiVersioning(options =>
 
 // Configure Entity Framework
 builder.Services.AddDbContext<GamingCafeContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        npgsqlOptions => npgsqlOptions.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null)));
 
 // Configure Redis Cache (register the distributed cache client) but avoid connecting synchronously
 try
@@ -286,6 +321,45 @@ builder.Services.AddCors(options =>
 // Register IHttpContextAccessor and in-memory cache for middleware and services
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
+
+// Configure a default HttpClient with conservative Polly policies (timeout, retry with jitter, circuit breaker)
+// Conservative defaults: 3 retries (exponential backoff + small jitter), 10s timeout, circuit opens after 5 failures for 30s.
+static IAsyncPolicy<HttpResponseMessage> DefaultRetryPolicy()
+{
+    return HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .OrResult(msg => (int)msg.StatusCode == 429)
+            .WaitAndRetryAsync(3, retryAttempt =>
+                TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)) + TimeSpan.FromMilliseconds(new Random().Next(0, 100)),
+                onRetry: (outcome, timespan, retryAttempt, context) =>
+                {
+                    Serilog.Log.Warning("HttpClient retry {Retry} after {Delay}ms due to {Reason}", retryAttempt, timespan.TotalMilliseconds, outcome.Exception?.Message ?? outcome.Result?.StatusCode.ToString());
+                });
+}
+
+static IAsyncPolicy<HttpResponseMessage> DefaultTimeoutPolicy()
+{
+    return Policy.TimeoutAsync<HttpResponseMessage>(TimeSpan.FromSeconds(10), TimeoutStrategy.Pessimistic);
+}
+
+static IAsyncPolicy<HttpResponseMessage> DefaultCircuitBreakerPolicy()
+{
+    return Policy<HttpResponseMessage>
+        .Handle<Exception>()
+        .OrResult(r => !r.IsSuccessStatusCode)
+        .CircuitBreakerAsync(5, TimeSpan.FromSeconds(30), onBreak: (outcome, ts) =>
+        {
+            Serilog.Log.Warning("HttpClient circuit opened for {Duration}ms due to: {Reason}", ts.TotalMilliseconds, outcome.Exception?.Message ?? outcome.Result?.StatusCode.ToString());
+        }, onReset: () =>
+        {
+            Serilog.Log.Information("HttpClient circuit reset");
+        });
+}
+
+builder.Services.AddHttpClient("Default")
+    .AddPolicyHandler(DefaultTimeoutPolicy())
+    .AddPolicyHandler(DefaultRetryPolicy())
+    .AddPolicyHandler(DefaultCircuitBreakerPolicy());
 
 // Add a default/global rate limiter so app.UseRateLimiter() can operate without throwing
 builder.Services.AddRateLimiter(options =>
@@ -528,44 +602,9 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Simple Prometheus-style /metrics endpoint for rate limiter counters
-app.MapGet("/metrics", () =>
-{
-    var allowed = RateLimitingMetrics.GetAllowed();
-    var rejected = RateLimitingMetrics.GetRejected();
-    var sb = new System.Text.StringBuilder();
-    sb.AppendLine("# HELP gamingcafe_rate_limit_allowed Number of requests allowed by rate limiter");
-    sb.AppendLine("# TYPE gamingcafe_rate_limit_allowed counter");
-    sb.AppendLine($"gamingcafe_rate_limit_allowed {allowed}");
-    sb.AppendLine("# HELP gamingcafe_rate_limit_rejected Number of requests rejected by rate limiter");
-    sb.AppendLine("# TYPE gamingcafe_rate_limit_rejected counter");
-    sb.AppendLine($"gamingcafe_rate_limit_rejected {rejected}");
-    // Background queue metrics
-    try
-    {
-        var queue = app.Services.GetService<GamingCafe.Core.Interfaces.Background.IBackgroundTaskQueue>();
-        if (queue != null)
-        {
-            var lens = queue.GetQueueLengths();
-            sb.AppendLine("# HELP gamingcafe_background_queue_high_length Approximate number of items in high priority queue");
-            sb.AppendLine("# TYPE gamingcafe_background_queue_high_length gauge");
-            sb.AppendLine($"gamingcafe_background_queue_high_length {lens.High}");
-            sb.AppendLine("# HELP gamingcafe_background_queue_normal_length Approximate number of items in normal priority queue");
-            sb.AppendLine("# TYPE gamingcafe_background_queue_normal_length gauge");
-            sb.AppendLine($"gamingcafe_background_queue_normal_length {lens.Normal}");
-            sb.AppendLine("# HELP gamingcafe_background_queue_low_length Approximate number of items in low priority queue");
-            sb.AppendLine("# TYPE gamingcafe_background_queue_low_length gauge");
-            sb.AppendLine($"gamingcafe_background_queue_low_length {lens.Low}");
-
-            var failures = queue.GetFailureCount();
-            sb.AppendLine("# HELP gamingcafe_background_task_failures Total background task failures since process start");
-            sb.AppendLine("# TYPE gamingcafe_background_task_failures counter");
-            sb.AppendLine($"gamingcafe_background_task_failures {failures}");
-        }
-    }
-    catch { }
-    return Results.Text(sb.ToString(), "text/plain; version=0.0.4");
-});
+// Use OpenTelemetry Prometheus scraping endpoint (registered by AddPrometheusExporter)
+// This will expose the metrics at /metrics by default.
+app.MapPrometheusScrapingEndpoint();
 
 // Map SignalR Hub
 app.MapHub<GameCafeHub>("/gamecafehub");
