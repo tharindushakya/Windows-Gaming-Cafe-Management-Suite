@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using System.Net;
 
 namespace GamingCafe.API.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/[controller]")]
 public class HealthController : ControllerBase
 {
     private readonly HealthCheckService _healthCheckService;

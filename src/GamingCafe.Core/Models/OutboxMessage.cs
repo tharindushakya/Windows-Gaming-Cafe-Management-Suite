@@ -9,12 +9,22 @@ namespace GamingCafe.Core.Models
     /// </summary>
     public class OutboxMessage
     {
-        public Guid OutboxMessageId { get; set; }
+        public int Id { get; set; }
+        public string AggregateId { get; set; } = string.Empty; // e.g., user:123
+        public string Type { get; set; } = string.Empty; // semantic type of event
+        public string Payload { get; set; } = string.Empty; // JSON payload
+        public OutboxStatus Status { get; set; } = OutboxStatus.Pending;
+        public int AttemptCount { get; set; } = 0;
+        public DateTime? LastAttemptAt { get; set; }
         public DateTime OccurredOn { get; set; } = DateTime.UtcNow;
-        public string MessageType { get; set; } = null!;
-        public string Payload { get; set; } = null!; // JSON payload
-        public DateTime? ProcessedOn { get; set; }
-        public DateTime? LockedUntil { get; set; }
-        public int Attempts { get; set; }
+    }
+
+    public enum OutboxStatus
+    {
+        Pending = 0,
+        Processing = 1,
+        Sent = 2,
+        Failed = 3,
+        DeadLetter = 4
     }
 }

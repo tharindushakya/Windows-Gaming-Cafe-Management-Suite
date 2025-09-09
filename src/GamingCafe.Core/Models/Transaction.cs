@@ -25,6 +25,10 @@ public class Transaction
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? ProcessedAt { get; set; }
 
+    // Optimistic concurrency token
+    [Timestamp]
+    public byte[]? RowVersion { get; set; }
+
     [StringLength(500)]
     public string Notes { get; set; } = string.Empty;
 

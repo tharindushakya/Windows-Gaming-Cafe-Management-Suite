@@ -50,7 +50,9 @@ public class GamingCafeContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-        base.OnConfiguring(optionsBuilder);
+      base.OnConfiguring(optionsBuilder);
+      // Register interceptors if the options builder supports it. Interceptors are resolved by DI in production; here we add default instances.
+      optionsBuilder.AddInterceptors(new GamingCafe.Data.Interceptors.AuditSaveChangesInterceptor(), new GamingCafe.Data.Interceptors.SoftDeleteInterceptor(), new GamingCafe.Data.Interceptors.ConcurrencyLoggingInterceptor());
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

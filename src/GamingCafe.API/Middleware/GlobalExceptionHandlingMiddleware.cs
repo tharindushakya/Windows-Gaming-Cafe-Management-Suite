@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Mvc;
 
 namespace GamingCafe.API.Middleware;
 
@@ -24,44 +25,49 @@ public class GlobalExceptionHandlingMiddleware
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "An unhandled exception occurred. Request: {Method} {Path}",
-                context.Request.Method, context.Request.Path);
+                _logger.LogError(ex, "An unhandled exception occurred. Request: {Method} {Path}",
+                    context.Request.Method, context.Request.Path);
 
-            await HandleExceptionAsync(context, ex);
+                await HandleExceptionAsync(context, ex);
         }
     }
 
     private static async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
-        context.Response.ContentType = "application/json";
-
-        var (statusCode, message) = exception switch
+        var (statusCode, message, details) = exception switch
         {
-            ValidationException validationEx => (HttpStatusCode.BadRequest, validationEx.Message),
-            UnauthorizedAccessException => (HttpStatusCode.Unauthorized, "Unauthorized access"),
-            NotFoundException notFoundEx => (HttpStatusCode.NotFound, notFoundEx.Message),
-            BusinessRuleException businessEx => (HttpStatusCode.BadRequest, businessEx.Message),
-            PaymentException paymentEx => (HttpStatusCode.PaymentRequired, paymentEx.Message),
-            ConcurrencyException => (HttpStatusCode.Conflict, "The record was modified by another user. Please refresh and try again."),
-            TimeoutException => (HttpStatusCode.RequestTimeout, "The request timed out. Please try again."),
-            _ => (HttpStatusCode.InternalServerError, "An internal server error occurred")
+            ValidationException validationEx => (StatusCodes.Status400BadRequest, validationEx.Message, validationEx.Errors?.ToArray() as object),
+            UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, "Unauthorized access", null),
+            NotFoundException notFoundEx => (StatusCodes.Status404NotFound, notFoundEx.Message, null),
+            BusinessRuleException businessEx => (StatusCodes.Status400BadRequest, businessEx.Message, null),
+            PaymentException paymentEx => (StatusCodes.Status402PaymentRequired, paymentEx.Message, null),
+            ConcurrencyException => (StatusCodes.Status409Conflict, "The record was modified by another user. Please refresh and try again.", null),
+            TimeoutException => (StatusCodes.Status408RequestTimeout, "The request timed out. Please try again.", null),
+            _ => (StatusCodes.Status500InternalServerError, "An internal server error occurred", null)
         };
 
-        context.Response.StatusCode = (int)statusCode;
-
-        var response = new ErrorResponse
+        // Build RFC7807 ProblemDetails
+        var prob = new ProblemDetails
         {
-            StatusCode = (int)statusCode,
-            Message = message,
-            Details = exception switch
-            {
-                ValidationException validationEx => validationEx.Errors?.ToArray(),
-                _ => null
-            },
-            TraceId = context.TraceIdentifier
+            Type = "https://tools.ietf.org/html/rfc7807",
+            Title = message,
+            Status = statusCode,
+            Instance = context.Request.Path
         };
 
-        var jsonResponse = JsonSerializer.Serialize(response, new JsonSerializerOptions
+        if (details != null)
+        {
+            prob.Extensions["details"] = details;
+        }
+
+        // Include correlation id (if present) to help trace issues end-to-end
+        var correlationId = context.Request.Headers.ContainsKey("X-Correlation-ID") ? context.Request.Headers["X-Correlation-ID"].ToString() : context.TraceIdentifier;
+        prob.Extensions["correlationId"] = correlationId;
+
+        context.Response.StatusCode = statusCode;
+        context.Response.ContentType = "application/problem+json";
+
+        var jsonResponse = JsonSerializer.Serialize(prob, new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         });

@@ -130,3 +130,26 @@ public class TwoFactorDisableRequestValidator : AbstractValidator<TwoFactorDisab
             .MinimumLength(8).WithMessage("Password must be at least 8 characters long");
     }
 }
+
+public class RegisterRequestValidator : AbstractValidator<GamingCafe.Core.DTOs.RegisterRequest>
+{
+    public RegisterRequestValidator()
+    {
+        RuleFor(x => x.Username)
+            .NotEmpty().WithMessage("Username is required")
+            .MinimumLength(3).WithMessage("Username must be at least 3 characters long")
+            .MaximumLength(50);
+
+        RuleFor(x => x.Email)
+            .NotEmpty().WithMessage("Email is required")
+            .EmailAddress().WithMessage("Invalid email format")
+            .MaximumLength(255);
+
+        RuleFor(x => x.Password)
+            .NotEmpty().WithMessage("Password is required")
+            .MinimumLength(8).WithMessage("Password must be at least 8 characters long")
+            .MaximumLength(100).WithMessage("Password must not exceed 100 characters")
+            .Matches(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]")
+            .WithMessage("Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character");
+    }
+}

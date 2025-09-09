@@ -3,13 +3,15 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using GamingCafe.API.Services;
 using GamingCafe.API.Hubs;
+using Asp.Versioning;
 using GamingCafe.Core.Models;
 using GamingCafe.Core.Interfaces;
 
 namespace GamingCafe.API.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/[controller]")]
 [Authorize]
 public class StationsController : ControllerBase
 {

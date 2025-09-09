@@ -3,13 +3,15 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
 using Microsoft.EntityFrameworkCore;
 using GamingCafe.Data;
 
 namespace GamingCafe.API.Controllers
 {
     [ApiController]
-    [Route("api/admin/refresh-tokens")]
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/admin/refresh-tokens")]
     [Authorize(Roles = "Admin")]
     public class RefreshTokensController : ControllerBase
     {

@@ -17,4 +17,6 @@ public static class Observability
     public static readonly Histogram<double> WalletUpdateDuration = AppMeter.CreateHistogram<double>("wallet_update_duration_ms", unit: "ms", description: "Duration of wallet update operations");
     // Count of detected refresh-token reuse events (possible theft)
     public static readonly Counter<long> RefreshTokenReuseCounter = AppMeter.CreateCounter<long>("refresh_token_reuse_detected_total", description: "Number of times refresh token reuse was detected and handled");
+    // Domain metrics
+    public static readonly Counter<long> WalletTransactionsCounter = AppMeter.CreateCounter<long>("wallet_transactions_total", description: "Total wallet transactions recorded");
 }

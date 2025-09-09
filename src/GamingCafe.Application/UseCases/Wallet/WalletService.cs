@@ -50,6 +50,8 @@ namespace GamingCafe.Application.UseCases.Wallet
 
                 await _db.SaveChangesAsync();
                 await tx.CommitAsync();
+                // Record domain metric for wallet transactions
+                GamingCafe.Core.Observability.WalletTransactionsCounter.Add(1);
                 return true;
             }
             catch

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
 using GamingCafe.Core.Models;
 using GamingCafe.Core.Interfaces;
 using GamingCafe.API.DTOs;
@@ -9,7 +10,8 @@ using System.ComponentModel.DataAnnotations;
 namespace GamingCafe.API.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/[controller]")]
 [Authorize(Roles = "Admin,Manager")]
 public class ReportsController : ControllerBase
 {

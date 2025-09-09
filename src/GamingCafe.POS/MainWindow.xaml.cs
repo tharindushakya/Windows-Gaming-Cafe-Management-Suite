@@ -33,8 +33,8 @@ public partial class MainWindow : Window
             .UseSqlServer(connectionString)
             .Options;
         
-        _context = new GamingCafeContext(options);
-        _context.Database.EnsureCreated();
+    _context = new GamingCafeContext(options);
+    // Intentionally do not call EnsureCreated here. Use EF Core migrations for schema management or a dedicated dev initializer.
     }
 
     private void UpdateStationInfo()

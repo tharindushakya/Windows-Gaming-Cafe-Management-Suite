@@ -41,6 +41,10 @@ public class InventoryMovement
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public int? CreatedBy { get; set; }
 
+    // Optimistic concurrency token for inventory movements
+    [Timestamp]
+    public byte[]? RowVersion { get; set; }
+
     // Navigation properties
     public virtual Product Product { get; set; } = null!;
     public virtual User? User { get; set; }

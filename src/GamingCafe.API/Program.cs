@@ -21,6 +21,7 @@ using Serilog;
 using Serilog.Events;
 using Microsoft.AspNetCore.Mvc;
 using Asp.Versioning;
+using Asp.Versioning.ApiExplorer;
 // OpenTelemetry instrumentation was attempted but reverted to avoid package conflicts; use internal /metrics endpoint instead if needed.
 using FluentValidation;
 using FluentValidation.AspNetCore;
@@ -37,6 +38,8 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Instrumentation.EntityFrameworkCore;
+using System.Diagnostics;
+using Serilog.Context;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -61,6 +64,8 @@ builder.Services.AddOpenTelemetry()
     {
         meterProviderBuilder
             .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(builder.Environment.ApplicationName ?? "GamingCafe.API"))
+            // Add runtime instrumentation (GC, threads, CPU) and the Prometheus exporter
+            .AddRuntimeInstrumentation()
             .AddPrometheusExporter();
     });
 
@@ -69,6 +74,8 @@ builder.Services.AddOpenTelemetry()
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
     .Enrich.FromLogContext()
+    // Enrich logs with current Activity ids when available
+    .Enrich.WithProperty("service", builder.Environment.ApplicationName ?? "GamingCafe.API")
     .WriteTo.Console()
     .WriteTo.File("logs/log-.txt", rollingInterval: Serilog.RollingInterval.Day, retainedFileCountLimit: 14)
     .CreateLogger();
@@ -89,44 +96,14 @@ builder.Services.AddApiVersioning(options =>
 {
     options.DefaultApiVersion = new ApiVersion(1, 0);
     options.AssumeDefaultVersionWhenUnspecified = true;
+    options.ReportApiVersions = true;
     options.ApiVersionReader = ApiVersionReader.Combine(
         new QueryStringApiVersionReader("version"),
         new HeaderApiVersionReader("X-Version")
     );
 });
 
-// Note: API explorer for per-version Swagger docs is intentionally omitted to avoid extra package dependencies.
-// We still register basic API versioning above; Swagger will expose a default v1 doc.
-
-// Configure Entity Framework with pluggable provider (Npgsql by default)
-var provider = builder.Configuration["Database:Provider"] ?? "Npgsql";
-var defaultConn = builder.Configuration.GetConnectionString("DefaultConnection");
-if (string.Equals(provider, "SqlServer", StringComparison.OrdinalIgnoreCase))
-{
-    builder.Services.AddDbContext<GamingCafeContext>(options =>
-        options.UseSqlServer(defaultConn, sqlOptions => sqlOptions.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorNumbersToAdd: null)));
-}
-else
-{
-    builder.Services.AddDbContext<GamingCafeContext>(options =>
-        options.UseNpgsql(defaultConn, npgsqlOptions => npgsqlOptions.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null)));
-}
-
-// Configure Redis Cache (register the distributed cache client) but avoid connecting synchronously
-try
-{
-    var redisConfig = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
-    // Register IDistributedCache implementation using StackExchange Redis (will not create a ConnectionMultiplexer here)
-    builder.Services.AddStackExchangeRedisCache(options =>
-    {
-        options.Configuration = redisConfig;
-        options.InstanceName = "GamingCafe";
-    });
-}
-catch (Exception ex)
-{
-    Log.Warning(ex, "Redis setup failed during registration. Application will run without Redis cache.");
-}
+// Swagger registration is configured later after other services to avoid duplicate registrations.
 
 // Respect DataProtection:UseRedis in configuration. Default to true to prefer Redis in multi-instance.
 var useRedisForDataProtection = builder.Configuration.GetValue<bool?>("DataProtection:UseRedis") ?? false;
@@ -329,6 +306,25 @@ builder.Services.AddCors(options =>
 // Register IHttpContextAccessor and in-memory cache for middleware and services
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
+// Register a default IDistributedCache implementation (in-memory) so services depending on IDistributedCache resolve in dev.
+builder.Services.AddDistributedMemoryCache();
+
+// Configure EF DbContext. Prefer the configured DefaultConnection (Postgres). If it's missing or contains placeholders, fall back to a local Sqlite file for development.
+var defaultConnection = builder.Configuration.GetConnectionString("DefaultConnection") ?? string.Empty;
+var useSqliteFallback = string.IsNullOrWhiteSpace(defaultConnection) || defaultConnection.Contains("<<") || defaultConnection.Contains("null");
+if (!useSqliteFallback)
+{
+    builder.Services.AddDbContext<GamingCafe.Data.GamingCafeContext>(options =>
+        options.UseNpgsql(defaultConnection, npgsqlOptions => npgsqlOptions.EnableRetryOnFailure()));
+}
+else
+{
+    // Development fallback to Sqlite for local runs
+    var sqliteFile = Path.Combine(builder.Environment.ContentRootPath, "gamingcafe-dev.db");
+    var sqliteConn = $"Data Source={sqliteFile}";
+    builder.Services.AddDbContext<GamingCafe.Data.GamingCafeContext>(options =>
+        options.UseSqlite(sqliteConn));
+}
 
 // Register application services
 builder.Services.AddScoped<GamingCafe.Application.UseCases.Wallet.WalletService>();
@@ -384,6 +380,30 @@ builder.Services.AddRateLimiter(options =>
             new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 200,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
+
+    // Named policy for login endpoint - strict to mitigate credential stuffing
+    options.AddPolicy("login-limiter", context =>
+        RateLimitPartition.GetTokenBucketLimiter(partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "global", factory: _ =>
+            new TokenBucketRateLimiterOptions
+            {
+                TokenLimit = 5,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0,
+                ReplenishmentPeriod = TimeSpan.FromMinutes(1),
+                TokensPerPeriod = 5,
+                AutoReplenishment = true
+            }));
+
+    // Named policy for other auth-sensitive endpoints (password reset, verify-email)
+    options.AddPolicy("auth-sensitive-limiter", context =>
+        RateLimitPartition.GetFixedWindowLimiter(partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "global", factory: _ =>
+            new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
                 Window = TimeSpan.FromMinutes(1),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 QueueLimit = 0
@@ -446,6 +466,8 @@ builder.Services.AddScoped<ICacheService, CacheService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IStationService, StationService>();
 builder.Services.AddScoped<ITwoFactorService, GamingCafe.Data.Services.TwoFactorService>();
+// Register UnitOfWork implementation from Data layer so controllers and services can resolve it
+builder.Services.AddScoped<GamingCafe.Core.Interfaces.IUnitOfWork, GamingCafe.Data.Repositories.UnitOfWork>();
 // Register Data layer audit service first
 builder.Services.AddScoped<GamingCafe.Data.Services.AuditService>();
 // Then register API-level decorator for enrichment
@@ -504,6 +526,9 @@ builder.Services.AddSwaggerGen(opts =>
 var app = builder.Build();
 // Use forwarded headers middleware early so downstream middleware (rate limiter, logging) sees the correct client IP
 app.UseForwardedHeaders();
+
+// Correlation middleware: set X-Correlation-ID and enrich logs with Trace/Span IDs
+app.UseMiddleware<GamingCafe.API.Middleware.CorrelationMiddleware>();
 
 // Conditional request/response body logging middleware (config-gated, safe defaults). Place early so it sees real request/response but after forwarded headers.
 try
@@ -568,21 +593,13 @@ else
 // Add global exception handling middleware
 app.UseMiddleware<GamingCafe.API.Middleware.GlobalExceptionHandlingMiddleware>();
 
-// Security headers
-app.Use(async (context, next) =>
-{
-    context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
-    context.Response.Headers.Append("X-Frame-Options", "DENY");
-    context.Response.Headers.Append("X-XSS-Protection", "1; mode=block");
-    context.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
-    
-    if (!app.Environment.IsDevelopment())
-    {
-        context.Response.Headers.Append("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-    }
-    
-    await next();
-});
+// Security headers (centralized middleware)
+app.UseMiddleware<GamingCafe.API.Middleware.SecurityHeadersMiddleware>();
+
+// HSTS is handled above when not in Development
+
+// Lightweight auth-specific rate limiting to protect sensitive endpoints (login, password reset, verify-email)
+app.UseMiddleware<GamingCafe.API.Middleware.AuthRateLimitMiddleware>();
 
 // Rate limiting: use ASP.NET Core built-in rate limiter configured from RateLimiting options (best practice)
 app.UseRateLimiter();

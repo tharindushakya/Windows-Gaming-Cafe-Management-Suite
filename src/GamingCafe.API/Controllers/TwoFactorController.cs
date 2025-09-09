@@ -1,12 +1,14 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Asp.Versioning;
 using GamingCafe.Core.Interfaces.Services;
 using GamingCafe.Core.DTOs;
 
 namespace GamingCafe.API.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/[controller]")]
 public class TwoFactorController : ControllerBase
 {
     private readonly ITwoFactorService _twoFactorService;

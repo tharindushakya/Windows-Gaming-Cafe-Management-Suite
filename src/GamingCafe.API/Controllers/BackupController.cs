@@ -4,11 +4,13 @@ using GamingCafe.Core.Interfaces.Services;
 using GamingCafe.Core.DTOs;
 using System.ComponentModel.DataAnnotations;
 using GamingCafe.Core.Authorization;
+using Asp.Versioning;
 
 namespace GamingCafe.API.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/[controller]")]
 [Authorize(Policy = PolicyNames.RequireAdmin)]
 public class BackupController : ControllerBase
 {

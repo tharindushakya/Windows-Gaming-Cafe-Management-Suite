@@ -221,9 +221,10 @@ public class UnitOfWork : IUnitOfWork
         return await _context.Database.CanConnectAsync();
     }
 
-    public async Task EnsureDatabaseCreatedAsync()
+    public Task EnsureDatabaseCreatedAsync()
     {
-        await _context.Database.EnsureCreatedAsync();
+        // EnsureCreated is intentionally removed to avoid migration/race conditions. Use migrations instead.
+        throw new InvalidOperationException("EnsureDatabaseCreatedAsync is not supported. Use MigrateDatabaseAsync which relies on EF Core migrations.");
     }
 
     public async Task MigrateDatabaseAsync()
