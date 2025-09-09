@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GamingCafe.Admin", "src\Gam
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GamingCafe.POS", "src\GamingCafe.POS\GamingCafe.POS.csproj", "{AC3BA443-5D8D-44C6-A3A6-3E41A0C3DCB9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GamingCafe.Application", "src\GamingCafe.Application\GamingCafe.Application.csproj", "{A3D3A5B1-6C2A-4F6B-9C2A-D3A5B16C2A4F}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GamingCafe.Core", "src\GamingCafe.Core\GamingCafe.Core.csproj", "{7CE6D5AA-49ED-4E99-8C4B-1BDA6E5D3AF6}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GamingCafe.Data", "src\GamingCafe.Data\GamingCafe.Data.csproj", "{786848AB-AFAF-40EB-8B9C-46C637E8D917}"

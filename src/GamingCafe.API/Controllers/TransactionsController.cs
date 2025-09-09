@@ -14,11 +14,13 @@ public class TransactionsController : ControllerBase
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<TransactionsController> _logger;
+    private readonly GamingCafe.Application.UseCases.Wallet.WalletService _walletService;
 
-    public TransactionsController(IUnitOfWork unitOfWork, ILogger<TransactionsController> logger)
+        public TransactionsController(IUnitOfWork unitOfWork, ILogger<TransactionsController> logger, GamingCafe.Application.UseCases.Wallet.WalletService walletService)
     {
         _unitOfWork = unitOfWork;
         _logger = logger;
+            _walletService = walletService;
     }
 
     /// <summary>
@@ -392,42 +394,13 @@ public class TransactionsController : ControllerBase
             // Update user wallet if applicable (atomic)
             if (originalTransaction.PaymentMethod == PaymentMethod.Wallet)
             {
-                // Ensure wallet exists
-                var wallet = await _unitOfWork.Repository<Wallet>().FirstOrDefaultAsync(w => w.UserId == originalTransaction.UserId);
-                if (wallet == null)
-                {
-                    wallet = new Wallet
-                    {
-                        UserId = originalTransaction.UserId,
-                        Balance = 0m,
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    };
-                    await _unitOfWork.Repository<Wallet>().AddAsync(wallet);
-                    await _unitOfWork.SaveChangesAsync();
-                }
-
-                var (success, newBalance) = await _unitOfWork.TryAtomicUpdateWalletBalanceAsync(wallet.WalletId, request.RefundAmount);
-                if (success)
-                {
-                    var wt = new WalletTransaction
-                    {
-                        WalletId = wallet.WalletId,
-                        UserId = wallet.UserId,
-                        Amount = request.RefundAmount,
-                        Type = WalletTransactionType.Credit,
-                        Description = $"Refund for transaction {originalTransaction.TransactionId}",
-                        BalanceBefore = newBalance - request.RefundAmount,
-                        BalanceAfter = newBalance,
-                        TransactionDate = DateTime.UtcNow,
-                        Status = WalletTransactionStatus.Completed
-                    };
-                    await _unitOfWork.Repository<WalletTransaction>().AddAsync(wt);
-                }
-                else
+                var cmd = new GamingCafe.Application.UseCases.Wallet.UpdateWalletCommand(originalTransaction.UserId, request.RefundAmount, $"Refund for transaction {originalTransaction.TransactionId}");
+                var applied = await _walletService.TryApplyAsync(cmd);
+                if (!applied)
                 {
                     return Conflict(new { message = "Failed to credit wallet for refund. Please retry." });
                 }
+                // The WalletService records a WalletTransaction; we rely on it to write details.
             }
 
             await _unitOfWork.SaveChangesAsync();

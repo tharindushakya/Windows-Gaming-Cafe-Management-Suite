@@ -21,6 +21,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.10" />
+  <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.11" />
     <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="8.0.11" />
     <PackageReference Include="OpenTelemetry" Version="1.12.0" />
     <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.12.0-beta.1" />
@@ -55,8 +56,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\GamingCafe.Data\GamingCafe.Data.csproj" />
-    <ProjectReference Include="..\GamingCafe.Core\GamingCafe.Core.csproj" />
+  <ProjectReference Include="..\GamingCafe.Data\GamingCafe.Data.csproj" />
+  <ProjectReference Include="..\GamingCafe.Core\GamingCafe.Core.csproj" />
+  <ProjectReference Include="..\GamingCafe.Application\GamingCafe.Application.csproj" />
   </ItemGroup>
 
 </Project>

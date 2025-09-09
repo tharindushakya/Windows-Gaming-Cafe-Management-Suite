@@ -98,11 +98,19 @@ builder.Services.AddApiVersioning(options =>
 // Note: API explorer for per-version Swagger docs is intentionally omitted to avoid extra package dependencies.
 // We still register basic API versioning above; Swagger will expose a default v1 doc.
 
-// Configure Entity Framework
-builder.Services.AddDbContext<GamingCafeContext>(options =>
-    options.UseNpgsql(
-        builder.Configuration.GetConnectionString("DefaultConnection"),
-        npgsqlOptions => npgsqlOptions.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null)));
+// Configure Entity Framework with pluggable provider (Npgsql by default)
+var provider = builder.Configuration["Database:Provider"] ?? "Npgsql";
+var defaultConn = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.Equals(provider, "SqlServer", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddDbContext<GamingCafeContext>(options =>
+        options.UseSqlServer(defaultConn, sqlOptions => sqlOptions.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorNumbersToAdd: null)));
+}
+else
+{
+    builder.Services.AddDbContext<GamingCafeContext>(options =>
+        options.UseNpgsql(defaultConn, npgsqlOptions => npgsqlOptions.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null)));
+}
 
 // Configure Redis Cache (register the distributed cache client) but avoid connecting synchronously
 try
@@ -321,6 +329,12 @@ builder.Services.AddCors(options =>
 // Register IHttpContextAccessor and in-memory cache for middleware and services
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
+
+// Register application services
+builder.Services.AddScoped<GamingCafe.Application.UseCases.Wallet.WalletService>();
+
+// Register OutboxProcessor hosted service (scans OutboxMessages and dispatches them)
+builder.Services.AddHostedService<GamingCafe.API.Background.OutboxProcessor>();
 
 // Configure a default HttpClient with conservative Polly policies (timeout, retry with jitter, circuit breaker)
 // Conservative defaults: 3 retries (exponential backoff + small jitter), 10s timeout, circuit opens after 5 failures for 30s.

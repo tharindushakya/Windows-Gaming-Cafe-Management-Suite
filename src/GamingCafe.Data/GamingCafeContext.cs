@@ -39,6 +39,9 @@ public class GamingCafeContext : DbContext
 
     // Audit Logging
     public DbSet<AuditLog> AuditLogs { get; set; }
+    
+      // Outbox for reliable messaging
+      public DbSet<GamingCafe.Core.Models.OutboxMessage> OutboxMessages { get; set; }
       // Refresh tokens
       public DbSet<GamingCafe.Core.Models.RefreshToken> RefreshTokens { get; set; }
 
