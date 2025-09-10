@@ -176,7 +176,8 @@ if (useRedisForDataProtection)
                     try
                     {
                         var pwd = pfxPassword ?? string.Empty;
-                        var cert = new X509Certificate2(pfxPath, pwd, X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet);
+                        // .NET 10+: Prefer X509CertificateLoader over X509Certificate2 constructor
+                        var cert = System.Security.Cryptography.X509Certificates.X509CertificateLoader.LoadPkcs12FromFile(pfxPath, pwd);
                         dataProtectionBuilder.ProtectKeysWithCertificate(cert);
                     }
                     catch (Exception ex)

@@ -394,8 +394,13 @@ public class TwoFactorService : ITwoFactorService
 
     private byte[] Pbkdf2Hash(string input, byte[] salt, int iterations = 100_000, int length = 32)
     {
-        using var derive = new Rfc2898DeriveBytes(input, salt, iterations, HashAlgorithmName.SHA256);
-        return derive.GetBytes(length);
+        // Use the static PBKDF2 API to avoid obsolete constructors
+        return Rfc2898DeriveBytes.Pbkdf2(
+            password: input,
+            salt: salt,
+            iterations: iterations,
+            hashAlgorithm: HashAlgorithmName.SHA256,
+            outputLength: length);
     }
 
     // Verifies entered code against stored hashed list. If match, consumes it and returns updated list.

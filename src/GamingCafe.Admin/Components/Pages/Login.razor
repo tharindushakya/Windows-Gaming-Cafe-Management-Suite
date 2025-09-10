@@ -91,7 +91,7 @@
     private bool requiresTwoFactor = false;
     private string errorMessage = string.Empty;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         // Redirect if already authenticated
         if (AuthService.IsAuthenticated())
@@ -141,13 +141,13 @@
         }
     }
 
-    private async Task HandleForgotPassword()
+    private void HandleForgotPassword()
     {
         // Navigate to Forgot Password page
         Navigation.NavigateTo("/forgot-password");
     }
 
-    private async Task HandleRegister()
+    private void HandleRegister()
     {
         // Navigate to Register page
         Navigation.NavigateTo("/register");

@@ -221,10 +221,11 @@ public class BackupMonitoringService : IBackupMonitoringService
             // Check if file is readable
             using var stream = File.OpenRead(backupFilePath);
             var buffer = new byte[1024];
-            await stream.ReadAsync(buffer, 0, buffer.Length);
+            // Use span-based overload to avoid inexact read warning
+            var bytesRead = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length));
 
             // For PostgreSQL backups, check for SQL dump header
-            var header = System.Text.Encoding.UTF8.GetString(buffer);
+            var header = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead);
             var isValidSqlDump = header.Contains("PostgreSQL database dump") || 
                                header.Contains("--") ||
                                header.Contains("SET");
