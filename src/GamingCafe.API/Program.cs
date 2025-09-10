@@ -50,6 +50,8 @@ builder.Services.AddOpenTelemetry()
     {
         tracerProviderBuilder
             .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(builder.Environment.ApplicationName ?? "GamingCafe.API"))
+            // Set a high sampling ratio for critical flows (95%)
+            .SetSampler(new TraceIdRatioBasedSampler(0.95))
             .AddAspNetCoreInstrumentation()
             .AddHttpClientInstrumentation()
             .AddEntityFrameworkCoreInstrumentation() // instrument EF Core

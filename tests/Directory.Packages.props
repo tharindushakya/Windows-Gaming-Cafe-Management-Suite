@@ -1,0 +1,4 @@
+<Project>
+  <!-- Minimal Directory.Packages.props for test folder to avoid MSBuild errors.
+       No central package versions are declared here intentionally. -->
+</Project>

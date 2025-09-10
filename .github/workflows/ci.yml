@@ -17,7 +17,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
         uses: actions/cache@v4
@@ -33,6 +33,45 @@ jobs:
       - name: Build
         run: dotnet build "GamingCafeManagement.sln" --no-restore --configuration Release --verbosity minimal
 
-      - name: Run tests
+      - name: Run tests (with coverage)
         run: |
-          dotnet test "GamingCafeManagement.sln" --no-build --verbosity normal
+          dotnet test "GamingCafeManagement.sln" --no-build --verbosity normal --collect:"XPlat Code Coverage" --settings tests/coverlet.runsettings
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            **/TestResults/**/coverage.cobertura.xml
+      - name: Check coverage threshold
+        run: |
+          echo "Found coverage files:";
+          find . -name 'coverage.cobertura.xml' -print || true
+          pwsh -NoProfile -ExecutionPolicy Bypass tests/tools/check-coverage.ps1 -minPercent 70
+
+  perf-and-k6:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install k6
+        run: sudo apt-get update && sudo apt-get install -yq k6
+
+      - name: Start API in background
+        run: |
+          dotnet run --project src/GamingCafe.API/GamingCafe.API.csproj &
+          echo "Waiting for API to respond on http://localhost:5000/health/ready"
+          for i in {1..30}; do
+            if curl -sSf http://localhost:5000/health/ready >/dev/null; then
+              echo "API is ready"
+              break
+            fi
+            echo "waiting... ($i)"
+            sleep 2
+          done
+
+      - name: Run k6 login/session test
+        env:
+          BASE_URL: http://localhost:5000
+        run: k6 run k6/login_session_test.js
