@@ -24,22 +24,26 @@
 
                         <div class="mb-3">
                             <label for="email" class="form-label">Email</label>
-                            <InputText @bind-Value="loginRequest.Email" @bind-Value:event="oninput"
-                                      class="form-control" 
-                                      id="email" 
-                                      placeholder="Enter your email" 
-                                      disabled="@isLoading" />
+                            <InputText Value="loginRequest.Email"
+                                       ValueChanged="@(v => OnValueChanged("Email", v))"
+                                       ValueExpression="@(() => loginRequest.Email)"
+                                       class="form-control"
+                                       id="email"
+                                       placeholder="Enter your email"
+                                       disabled="@isLoading" />
                             <ValidationMessage For="@(() => loginRequest.Email)" class="text-danger" />
                         </div>
 
                         <div class="mb-3">
                             <label for="password" class="form-label">Password</label>
-                            <InputText @bind-Value="loginRequest.Password" @bind-Value:event="oninput"
-                                      type="password" 
-                                      class="form-control" 
-                                      id="password" 
-                                      placeholder="Enter your password" 
-                                      disabled="@isLoading" />
+                            <InputText Value="loginRequest.Password"
+                                       ValueChanged="@(v => OnValueChanged("Password", v))"
+                                       ValueExpression="@(() => loginRequest.Password)"
+                                       type="password"
+                                       class="form-control"
+                                       id="password"
+                                       placeholder="Enter your password"
+                                       disabled="@isLoading" />
                             <ValidationMessage For="@(() => loginRequest.Password)" class="text-danger" />
                         </div>
 
@@ -47,12 +51,14 @@
                         {
                             <div class="mb-3">
                                 <label for="twoFactorCode" class="form-label">Two-Factor Code</label>
-                                <InputText @bind-Value="loginRequest.TwoFactorCode" @bind-Value:event="oninput"
-                                           class="form-control" 
-                                          id="twoFactorCode" 
-                                          placeholder="Enter 6-digit code" 
-                                          maxlength="6"
-                                          disabled="@isLoading" />
+                                <InputText Value="loginRequest.TwoFactorCode"
+                                           ValueChanged="@(v => OnValueChanged("TwoFactorCode", v))"
+                                           ValueExpression="@(() => loginRequest.TwoFactorCode)"
+                                           class="form-control"
+                                           id="twoFactorCode"
+                                           placeholder="Enter 6-digit code"
+                                           maxlength="6"
+                                           disabled="@isLoading" />
                                 <ValidationMessage For="@(() => loginRequest.TwoFactorCode)" class="text-danger" />
                             </div>
                         }
@@ -90,6 +96,27 @@
         </div>
     </div>
 </div>
+
+<!-- Native DOM listener for diagnostics: logs input events to browser console -->
+<script>
+    (function(){
+        function attach(id, name){
+            const el = document.getElementById(id);
+            if(!el){ console.log('Input element not found:', id); return; }
+            el.addEventListener('input', function(e){
+                console.log('Native input event', name, el.value);
+                const dbg = document.getElementById('login-debug-' + id);
+                if(dbg) dbg.textContent = el.value ? el.value : '(empty)';
+            });
+        }
+        // attach after short delay to allow prerendered DOM
+        setTimeout(function(){
+            attach('email','Email');
+            attach('password','Password');
+            attach('twoFactorCode','TwoFactorCode');
+        }, 200);
+    })();
+</script>
 
 @code {
     private LoginRequest loginRequest = new();
@@ -161,6 +188,24 @@
         errorMessage = string.IsNullOrWhiteSpace(combined) ? "Please fix the form errors." : combined;
         Console.WriteLine($"Login form invalid: {errorMessage}");
         StateHasChanged();
+    }
+
+    private void OnValueChanged(string field, object? value)
+    {
+        var str = value?.ToString() ?? string.Empty;
+        Console.WriteLine($"Field {field} changed: '{str}'");
+        switch (field)
+        {
+            case "Email":
+                loginRequest.Email = str;
+                break;
+            case "Password":
+                loginRequest.Password = str;
+                break;
+            case "TwoFactorCode":
+                loginRequest.TwoFactorCode = str;
+                break;
+        }
     }
 
     private void HandleRegister()
