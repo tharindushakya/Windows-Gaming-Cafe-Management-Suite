@@ -42,8 +42,9 @@ public class AuditSaveChangesInterceptor : SaveChangesInterceptor
         var userAgent = http?.Request?.Headers["User-Agent"].ToString();
         var correlationId = http?.Request?.Headers["X-Correlation-Id"].ToString();
 
-        var entries = context.ChangeTracker.Entries().Where(e => e.State == Microsoft.EntityFrameworkCore.EntityState.Added || e.State == Microsoft.EntityFrameworkCore.EntityState.Modified || e.State == Microsoft.EntityFrameworkCore.EntityState.Deleted);
-        foreach (var entry in entries)
+    // Snapshot the entries collection to avoid "Collection was modified" when we add AuditLog entities
+    var entries = context.ChangeTracker.Entries().Where(e => e.State == Microsoft.EntityFrameworkCore.EntityState.Added || e.State == Microsoft.EntityFrameworkCore.EntityState.Modified || e.State == Microsoft.EntityFrameworkCore.EntityState.Deleted).ToList();
+    foreach (var entry in entries)
         {
             var now = DateTime.UtcNow;
             // Set timestamps if available

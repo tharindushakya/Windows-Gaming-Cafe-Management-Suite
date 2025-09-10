@@ -12,16 +12,22 @@ public class AdminAuthService
     private readonly HttpClient _httpClient;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IConfiguration _configuration;
+    private readonly Microsoft.Extensions.Logging.ILogger<AdminAuthService> _logger;
+    private readonly CurrentUserState _currentUserState;
     private string? _baseUrl;
 
     public AdminAuthService(
-        HttpClient httpClient, 
+        HttpClient httpClient,
         IHttpContextAccessor httpContextAccessor,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        Microsoft.Extensions.Logging.ILogger<AdminAuthService> logger,
+        CurrentUserState currentUserState)
     {
         _httpClient = httpClient;
         _httpContextAccessor = httpContextAccessor;
         _configuration = configuration;
+        _logger = logger;
+        _currentUserState = currentUserState;
         _baseUrl = _configuration["ApiSettings:BaseUrl"] ?? "https://localhost:7001";
     }
 
@@ -31,12 +37,21 @@ public class AdminAuthService
         {
             var json = JsonSerializer.Serialize(request);
             var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-            
-            var response = await _httpClient.PostAsync($"{_baseUrl}/api/auth/login", content);
-            
+
+            // Log outgoing payload so it appears in console output
+            _logger?.LogInformation("AdminAuthService.LoginAsync sending payload to {Url}: {Payload}", $"{_baseUrl}/api/v1.0/auth/login", json);
+
+            var response = await _httpClient.PostAsync($"{_baseUrl}/api/v1.0/auth/login", content);
+
+            var responseText = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger?.LogWarning("Login request to {Url} returned {StatusCode}. Response: {Response}", $"{_baseUrl}/api/v1.0/auth/login", (int)response.StatusCode, responseText);
+            }
+
             if (response.IsSuccessStatusCode)
             {
-                var responseJson = await response.Content.ReadAsStringAsync();
+                var responseJson = responseText;
                 var loginResponse = JsonSerializer.Deserialize<LoginResponse>(responseJson, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
@@ -49,16 +64,22 @@ public class AdminAuthService
                     // Only create the authentication cookie when an access token is issued
                     if (!string.IsNullOrEmpty(loginResponse.AccessToken))
                     {
-                        await StoreTokenAsync(loginResponse.AccessToken);
-                        await CreateAuthenticationCookieAsync(loginResponse.User, loginResponse.AccessToken);
+                        // For Blazor Server, store in circuit-scoped state and notify AuthenticationStateProvider
+                        _currentUserState.Set(loginResponse.User, loginResponse.AccessToken);
                     }
 
                     return loginResponse;
                 }
             }
+            else
+            {
+                // When not success, return null so UI shows invalid credentials
+                return null;
+            }
         }
         catch (Exception ex)
         {
+            _logger?.LogError(ex, "Login error while calling API");
             Console.WriteLine($"Login error: {ex.Message}");
         }
 
@@ -164,7 +185,7 @@ public class AdminAuthService
         try
         {
             var content = new StringContent(JsonSerializer.Serialize(new { Email = email }), Encoding.UTF8, "application/json");
-            var response = await _httpClient.PostAsync($"{_baseUrl}/api/auth/forgot-password", content);
+            var response = await _httpClient.PostAsync($"{_baseUrl}/api/v1.0/auth/forgot-password", content);
             return response.IsSuccessStatusCode;
         }
         catch (Exception ex)
@@ -179,7 +200,7 @@ public class AdminAuthService
         try
         {
             var content = new StringContent(JsonSerializer.Serialize(request), Encoding.UTF8, "application/json");
-            var response = await _httpClient.PostAsync($"{_baseUrl}/api/auth/register", content);
+            var response = await _httpClient.PostAsync($"{_baseUrl}/api/v1.0/auth/register", content);
             return response.IsSuccessStatusCode;
         }
         catch (Exception ex)
@@ -192,38 +213,38 @@ public class AdminAuthService
 
 public class AdminAuthenticationStateProvider : AuthenticationStateProvider
 {
-    private readonly AdminAuthService _authService;
+    private readonly CurrentUserState _currentUserState;
 
-    public AdminAuthenticationStateProvider(AdminAuthService authService)
+    public AdminAuthenticationStateProvider(CurrentUserState currentUserState)
     {
-        _authService = authService;
+        _currentUserState = currentUserState;
+        _currentUserState.OnChange += NotifyAuthenticationStateChangedInternal;
     }
 
-    public override async Task<AuthenticationState> GetAuthenticationStateAsync()
+    private void NotifyAuthenticationStateChangedInternal()
     {
-        if (_authService.IsAuthenticated())
+        NotifyAuthenticationStateChanged(GetAuthenticationStateAsync());
+    }
+
+    public override Task<AuthenticationState> GetAuthenticationStateAsync()
+    {
+        var user = _currentUserState.User;
+        if (user != null)
         {
-            var user = await _authService.GetCurrentUserAsync();
-            if (user != null)
+            var claims = new List<Claim>
             {
-                var claims = new List<Claim>
-                {
-                    new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
-                    new Claim(ClaimTypes.Name, user.Username),
-                    new Claim(ClaimTypes.Email, user.Email),
-                    new Claim(ClaimTypes.Role, user.Role.ToString()),
-                    new Claim("FirstName", user.FirstName),
-                    new Claim("LastName", user.LastName),
-                    new Claim("UserData", JsonSerializer.Serialize(user))
-                };
+                new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
+                new Claim(ClaimTypes.Name, user.Username),
+                new Claim(ClaimTypes.Email, user.Email),
+                new Claim(ClaimTypes.Role, user.Role.ToString()),
+                new Claim("UserData", JsonSerializer.Serialize(user))
+            };
 
-                var claimsIdentity = new ClaimsIdentity(claims, "Cookies");
-                var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
-
-                return new AuthenticationState(claimsPrincipal);
-            }
+            var identity = new ClaimsIdentity(claims, "Cookies");
+            var principal = new ClaimsPrincipal(identity);
+            return Task.FromResult(new AuthenticationState(principal));
         }
 
-        return new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
+        return Task.FromResult(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity())));
     }
 }

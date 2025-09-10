@@ -18,13 +18,13 @@
                         <p class="text-muted">Sign in to your account</p>
                     </div>
 
-                    <EditForm Model="@loginRequest" OnValidSubmit="@HandleLogin" FormName="LoginForm">
+                    <EditForm Model="@loginRequest" OnValidSubmit="@HandleLogin" OnInvalidSubmit="@HandleInvalidSubmit" FormName="LoginForm">
                         <DataAnnotationsValidator />
                         <ValidationSummary class="text-danger mb-3" />
 
                         <div class="mb-3">
                             <label for="email" class="form-label">Email</label>
-                            <InputText @bind-Value="loginRequest.Email" 
+                            <InputText @bind-Value="loginRequest.Email" @bind-Value:event="oninput"
                                       class="form-control" 
                                       id="email" 
                                       placeholder="Enter your email" 
@@ -34,7 +34,7 @@
 
                         <div class="mb-3">
                             <label for="password" class="form-label">Password</label>
-                            <InputText @bind-Value="loginRequest.Password" 
+                            <InputText @bind-Value="loginRequest.Password" @bind-Value:event="oninput"
                                       type="password" 
                                       class="form-control" 
                                       id="password" 
@@ -47,8 +47,8 @@
                         {
                             <div class="mb-3">
                                 <label for="twoFactorCode" class="form-label">Two-Factor Code</label>
-                                <InputText @bind-Value="loginRequest.TwoFactorCode" 
-                                          class="form-control" 
+                                <InputText @bind-Value="loginRequest.TwoFactorCode" @bind-Value:event="oninput"
+                                           class="form-control" 
                                           id="twoFactorCode" 
                                           placeholder="Enter 6-digit code" 
                                           maxlength="6"
@@ -56,6 +56,12 @@
                                 <ValidationMessage For="@(() => loginRequest.TwoFactorCode)" class="text-danger" />
                             </div>
                         }
+
+                    <!-- Debug: show current model values (temporary) -->
+                    <div class="mt-3 text-muted small">
+                        <div>Email: @loginRequest.Email</div>
+                        <div>Password set: @(string.IsNullOrEmpty(loginRequest.Password) ? "no" : "yes")</div>
+                    </div>
 
                         @if (!string.IsNullOrEmpty(errorMessage))
                         {
@@ -145,6 +151,16 @@
     {
         // Navigate to Forgot Password page
         Navigation.NavigateTo("/forgot-password");
+    }
+
+    private void HandleInvalidSubmit(EditContext ctx)
+    {
+        // Collect validation messages and display them to help debug why the form is invalid
+        var messages = ctx.GetValidationMessages();
+        var combined = string.Join("; ", messages);
+        errorMessage = string.IsNullOrWhiteSpace(combined) ? "Please fix the form errors." : combined;
+        Console.WriteLine($"Login form invalid: {errorMessage}");
+        StateHasChanged();
     }
 
     private void HandleRegister()

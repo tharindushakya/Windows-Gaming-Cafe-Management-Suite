@@ -2,6 +2,7 @@ using GamingCafe.Admin.Components;
 using GamingCafe.Admin.Services;
 using GamingCafe.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Components.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,6 +35,10 @@ builder.Services.AddAuthorization();
 builder.Services.AddScoped<AdminAuthService>();
 builder.Services.AddScoped<AdminApiService>();
 builder.Services.AddScoped<AdminNotificationService>();
+// Circuit-scoped current user state for Blazor Server
+builder.Services.AddScoped<CurrentUserState>();
+// Provide the Blazor AuthenticationStateProvider backed by AdminAuthService
+builder.Services.AddScoped<AuthenticationStateProvider, AdminAuthenticationStateProvider>();
 
 var app = builder.Build();
 

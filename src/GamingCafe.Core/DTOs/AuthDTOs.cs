@@ -1,10 +1,15 @@
 using GamingCafe.Core.Models;
+using System.ComponentModel.DataAnnotations;
 
 namespace GamingCafe.Core.DTOs;
 
 public class LoginRequest
 {
+    [Required]
+    [EmailAddress]
     public string Email { get; set; } = string.Empty;
+
+    [Required]
     public string Password { get; set; } = string.Empty;
     public string? TwoFactorCode { get; set; }
     public string? RecoveryCode { get; set; }

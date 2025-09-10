@@ -8,6 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\GamingCafe.Application\GamingCafe.Application.csproj" />
     <ProjectReference Include="..\..\src\GamingCafe.Core\GamingCafe.Core.csproj" />
+  <ProjectReference Include="..\..\src\GamingCafe.API\GamingCafe.API.csproj" />
   </ItemGroup>
 
   <ItemGroup>
