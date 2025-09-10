@@ -29,8 +29,8 @@ namespace GamingCafe.Application.UseCases.Wallet
                 await _db.SaveChangesAsync();
             }
 
-            // Simple optimistic update: adjust balance and add transaction inside a transaction
-            using var tx = await _db.Database.BeginTransactionAsync();
+            // Use a serializable transaction to avoid phantom reads and ensure strict consistency for balance updates.
+            await using var tx = await _db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
             try
             {
                 var prior = wallet.Balance;
@@ -40,7 +40,7 @@ namespace GamingCafe.Application.UseCases.Wallet
                     WalletId = wallet.WalletId,
                     UserId = wallet.UserId,
                     Amount = cmd.Amount,
-                    Type = GamingCafe.Core.Models.WalletTransactionType.Credit,
+                    Type = cmd.Amount >= 0 ? GamingCafe.Core.Models.WalletTransactionType.Credit : GamingCafe.Core.Models.WalletTransactionType.Debit,
                     Description = cmd.Reason,
                     BalanceBefore = prior,
                     BalanceAfter = wallet.Balance,
@@ -48,7 +48,17 @@ namespace GamingCafe.Application.UseCases.Wallet
                     Status = GamingCafe.Core.Models.WalletTransactionStatus.Completed
                 });
 
-                await _db.SaveChangesAsync();
+                try
+                {
+                    await _db.SaveChangesAsync();
+                }
+                catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+                {
+                    // Concurrency conflict detected: another update changed the wallet. Fail and let caller retry.
+                    await tx.RollbackAsync();
+                    return false;
+                }
+
                 await tx.CommitAsync();
                 // Record domain metric for wallet transactions
                 GamingCafe.Core.Observability.WalletTransactionsCounter.Add(1);

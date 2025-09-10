@@ -534,7 +534,8 @@ public class AuthService : IAuthService
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        // Base claims
+        var claimsList = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
             new Claim(ClaimTypes.Email, user.Email),
@@ -542,6 +543,38 @@ public class AuthService : IAuthService
             new Claim(ClaimTypes.Role, user.Role.ToString()),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
+
+        // Fetch all permissions from IUserService and emit them as claims where possible.
+        try
+        {
+            var userService = _serviceProvider.GetService<IUserService>();
+            if (userService != null)
+            {
+                var perms = userService.GetPermissionsAsync(user.UserId).GetAwaiter().GetResult();
+                if (perms != null)
+                {
+                    // If wildcard present, add a single wildcard claim for convenience
+                    if (perms.Contains("*"))
+                    {
+                        claimsList.Add(new Claim(GamingCafe.Core.Authorization.CustomClaimTypes.Permission, "*"));
+                    }
+                    else
+                    {
+                        foreach (var p in perms)
+                        {
+                            if (!string.IsNullOrWhiteSpace(p))
+                                claimsList.Add(new Claim(GamingCafe.Core.Authorization.CustomClaimTypes.Permission, p));
+                        }
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // If permissions cannot be resolved synchronously, continue without them. The runtime handler can still consult IUserService.
+        }
+
+        var claims = claimsList.ToArray();
 
         var token = new JwtSecurityToken(
             issuer: jwtIssuer,

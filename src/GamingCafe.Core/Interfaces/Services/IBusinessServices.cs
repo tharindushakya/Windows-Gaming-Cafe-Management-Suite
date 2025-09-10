@@ -26,6 +26,7 @@ public interface IUserService
     Task<bool> RemoveRoleAsync(int userId, string role);
     Task<IEnumerable<string>> GetUserRolesAsync(int userId);
     Task<bool> HasPermissionAsync(int userId, string permission);
+    Task<IEnumerable<string>> GetPermissionsAsync(int userId);
 
     // Wallet management
     Task<decimal> GetWalletBalanceAsync(int userId);

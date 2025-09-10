@@ -261,19 +261,15 @@ builder.Services.AddAuthorization(options =>
     // Scope/claim based policy example for station management operations
     options.AddPolicy(PolicyNames.RequireStationScope, policy => policy.RequireClaim("scope", "stations.manage"));
 
-    // Example permission-based policies
-    // ManageInventory: Admin OR (Staff with permission inv:write)
-    options.AddPolicy("ManageInventory", policy => policy.RequireAssertion(ctx =>
-        ctx.User.IsInRole(RoleNames.Admin) || ctx.User.HasClaim(c => c.Type == GamingCafe.Core.Authorization.CustomClaimTypes.Permission && c.Value == "inv:write")
-    ));
+    // Example permission-based policies (use PermissionRequirement for consistent checks)
+    // ManageInventory: Admin OR permission inv:write
+    options.AddPolicy("ManageInventory", policy => policy.RequireRole(RoleNames.Admin).AddRequirements(new GamingCafe.API.Authorization.PermissionRequirement("inv:write")));
 
     // ViewFinancials: Admin only
     options.AddPolicy("ViewFinancials", policy => policy.RequireRole(RoleNames.Admin));
 
-    // IssueRefunds: Admin AND permission txn:refund (explicit check for both)
-    options.AddPolicy("IssueRefunds", policy => policy.RequireAssertion(ctx =>
-        ctx.User.IsInRole(RoleNames.Admin) && ctx.User.HasClaim(c => c.Type == GamingCafe.Core.Authorization.CustomClaimTypes.Permission && c.Value == "txn:refund")
-    ));
+    // IssueRefunds: Admin AND permission txn:refund
+    options.AddPolicy("IssueRefunds", policy => policy.RequireRole(RoleNames.Admin).AddRequirements(new GamingCafe.API.Authorization.PermissionRequirement("txn:refund")));
 
     // Owner-or-admin policy uses an IAuthorizationHandler registered below
     options.AddPolicy(PolicyNames.RequireOwnerOrAdmin, policy => policy.AddRequirements(new GamingCafe.API.Authorization.OwnershipRequirement()));
@@ -281,6 +277,8 @@ builder.Services.AddAuthorization(options =>
 
 // Register authorization handlers
 builder.Services.AddSingleton<IAuthorizationHandler, GamingCafe.API.Authorization.OwnershipHandler>();
+// PermissionHandler checks permission requirements and may consult IUserService when claims are absent
+builder.Services.AddScoped<IAuthorizationHandler, GamingCafe.API.Authorization.PermissionHandler>();
 
 // Configure FluentValidation - use automatic MVC integration and register validators from this assembly
 builder.Services.AddFluentValidationAutoValidation();
@@ -327,21 +325,30 @@ builder.Services.AddMemoryCache();
 // Register a default IDistributedCache implementation (in-memory) so services depending on IDistributedCache resolve in dev.
 builder.Services.AddDistributedMemoryCache();
 
+// Register Idempotency middleware as transient service for DI resolution (middleware types are resolved by the framework)
+// Register user service implementation used by authorization handlers
+builder.Services.AddScoped<GamingCafe.Core.Interfaces.Services.IUserService, GamingCafe.API.Services.UserService>();
+
+// Register enhanced audit interceptor which can access IHttpContextAccessor
+builder.Services.AddScoped<GamingCafe.Data.Interceptors.AuditSaveChangesInterceptor>();
+
 // Configure EF DbContext. Prefer the configured DefaultConnection (Postgres). If it's missing or contains placeholders, fall back to a local Sqlite file for development.
 var defaultConnection = builder.Configuration.GetConnectionString("DefaultConnection") ?? string.Empty;
 var useSqliteFallback = string.IsNullOrWhiteSpace(defaultConnection) || defaultConnection.Contains("<<") || defaultConnection.Contains("null");
 if (!useSqliteFallback)
 {
-    builder.Services.AddDbContext<GamingCafe.Data.GamingCafeContext>(options =>
-        options.UseNpgsql(defaultConnection, npgsqlOptions => npgsqlOptions.EnableRetryOnFailure()));
+    builder.Services.AddDbContext<GamingCafe.Data.GamingCafeContext>((serviceProvider, options) =>
+        options.UseNpgsql(defaultConnection, npgsqlOptions => npgsqlOptions.EnableRetryOnFailure())
+               .AddInterceptors(serviceProvider.GetRequiredService<GamingCafe.Data.Interceptors.AuditSaveChangesInterceptor>()));
 }
 else
 {
     // Development fallback to Sqlite for local runs
     var sqliteFile = Path.Combine(builder.Environment.ContentRootPath, "gamingcafe-dev.db");
     var sqliteConn = $"Data Source={sqliteFile}";
-    builder.Services.AddDbContext<GamingCafe.Data.GamingCafeContext>(options =>
-        options.UseSqlite(sqliteConn));
+    builder.Services.AddDbContext<GamingCafe.Data.GamingCafeContext>((serviceProvider, options) =>
+        options.UseSqlite(sqliteConn)
+               .AddInterceptors(serviceProvider.GetRequiredService<GamingCafe.Data.Interceptors.AuditSaveChangesInterceptor>()));
 }
 
 // Register application services
@@ -648,6 +655,9 @@ app.UseWhen(ctx => ctx.Request.Path.StartsWithSegments(hangfireDashboardPath), a
         Authorization = new[] { new HangfireDashboardAuthFilter() }
     });
 });
+
+// Idempotency middleware applies to POST endpoints like wallet/transactions to enforce idempotent processing
+app.UseMiddleware<GamingCafe.API.Middleware.IdempotencyMiddleware>();
 
 app.UseAuthentication();
 app.UseAuthorization();

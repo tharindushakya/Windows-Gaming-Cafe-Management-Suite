@@ -31,6 +31,8 @@ public class GamingCafeContext : DbContext
     public DbSet<Transaction> Transactions { get; set; }
       public DbSet<Wallet> Wallets { get; set; }
       public DbSet<WalletTransaction> WalletTransactions { get; set; }
+      // Idempotency keys for wallet-affecting endpoints
+      public DbSet<GamingCafe.Core.Models.IdempotencyKey> IdempotencyKeys { get; set; }
 
     // Loyalty Program
     public DbSet<LoyaltyProgram> LoyaltyPrograms { get; set; }
@@ -51,8 +53,7 @@ public class GamingCafeContext : DbContext
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
       base.OnConfiguring(optionsBuilder);
-      // Register interceptors if the options builder supports it. Interceptors are resolved by DI in production; here we add default instances.
-      optionsBuilder.AddInterceptors(new GamingCafe.Data.Interceptors.AuditSaveChangesInterceptor(), new GamingCafe.Data.Interceptors.SoftDeleteInterceptor(), new GamingCafe.Data.Interceptors.ConcurrencyLoggingInterceptor());
+      // NOTE: Interceptors are registered via DI when the DbContext is configured in Program.cs.
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -380,6 +381,16 @@ public class GamingCafeContext : DbContext
             entity.HasIndex(e => e.Timestamp);
             entity.HasIndex(e => new { e.EntityType, e.EntityId });
         });
+
+            // IdempotencyKey configuration
+            modelBuilder.Entity<GamingCafe.Core.Models.IdempotencyKey>(entity =>
+            {
+                  entity.HasKey(e => e.Key);
+                  entity.Property(e => e.Key).HasMaxLength(200);
+                  entity.HasIndex(e => e.Key).IsUnique();
+                  entity.Property(e => e.RequestHash).HasMaxLength(200);
+                  entity.Property(e => e.Endpoint).HasMaxLength(200);
+            });
 
             // RefreshToken Configuration
             modelBuilder.Entity<GamingCafe.Core.Models.RefreshToken>(entity =>

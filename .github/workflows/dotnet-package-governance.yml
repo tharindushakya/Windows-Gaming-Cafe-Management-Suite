@@ -1,0 +1,30 @@
+name: .NET Package Governance
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-scan:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore
+        run: dotnet restore
+      - name: Build
+        run: dotnet build --no-restore --configuration Release --verbosity minimal
+      - name: List vulnerable packages
+        run: |
+          dotnet list package --vulnerable --include-transitive
+      - name: Fail on vulnerable packages
+        run: |
+          set -e
+          dotnet list package --vulnerable --include-transitive > vulnerable.txt || true
+          if (Get-Content vulnerable.txt) -match '.'; then exit 1; fi
+        shell: pwsh
