@@ -35,13 +35,22 @@ export default function Users() {
     }
   }, [pageSize]);
 
-  useEffect(() => { fetchUsers(page, search); }, [fetchUsers, page, search]);
+  useEffect(() => { 
+    // Only fetch on page change, not on search change
+    if (search === '') {
+      fetchUsers(page, search); 
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchUsers, page]);
 
-  // debounced search
+  // debounced search - separate from page effect
   useEffect(() => {
     if (searchRef.current) clearTimeout(searchRef.current);
-    searchRef.current = setTimeout(() => { setPage(1); fetchUsers(1, search); }, 300);
-    return () => clearTimeout(searchRef.current);
+    searchRef.current = setTimeout(() => { 
+      setPage(1); 
+      fetchUsers(1, search); 
+    }, 500); // Increased timeout to reduce API calls
+    return () => { if (searchRef.current) clearTimeout(searchRef.current); };
   }, [search, fetchUsers]);
 
   function openCreate() { setEditingUser(null); setShowModal(true); }
@@ -276,7 +285,7 @@ export default function Users() {
           </SimpleModal>
         )}
       </div>
-      
+
     </div>
   );
 }

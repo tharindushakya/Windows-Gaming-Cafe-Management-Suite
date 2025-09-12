@@ -85,7 +85,13 @@ export default function Inventory() {
     finally { setMovementLoading(false); }
   };
 
-  useEffect(() => { fetchProducts(); }, [fetchProducts]);
+  useEffect(() => { 
+    // Only fetch on initial load and page changes when search is empty
+    if (search === '') {
+      fetchProducts(); 
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchProducts]);
   useEffect(() => { fetchLowStock(); fetchMovements(); }, []);
 
   // Debounced search
@@ -95,7 +101,7 @@ export default function Inventory() {
     searchTimeoutRef.current = setTimeout(() => {
       setPage(1);
       fetchProducts({ page: 1 });
-    }, 300);
+    }, 500); // Increased timeout to reduce API calls
     return () => { if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current); };
   }, [search, fetchProducts]);
 
@@ -217,101 +223,243 @@ export default function Inventory() {
 
   // UI
   return (
-    <div>
-      <h2 className="text-2xl font-semibold">Inventory</h2>
-      <p className="text-sm text-gray-600">Manage products, stock levels, and inventory movements.</p>
+    <div className="p-6 space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900">Inventory</h2>
+        <p className="text-gray-600 mt-2">Manage products, stock levels, and inventory movements.</p>
+      </div>
 
-      {error && <div className="text-red-600 mb-2">{error}</div>}
-
-      <div className="flex gap-4 mt-4">
-        <div className="flex-[2]">
-          <div className="mb-2 flex gap-2 items-center">
-            <input className="border rounded px-2 py-1 flex-1" placeholder="Search products..." value={search} onChange={e => setSearch(e.target.value)} />
-            <button className="px-2 py-1 border rounded bg-gray-100 hover:bg-gray-200" onClick={() => { setPage(1); fetchProducts({ page: 1 }); }}>Search</button>
-            <button className="px-2 py-1 bg-sky-600 text-white rounded" onClick={() => { setEditingProduct(null); setShowProductModal(true); }}>Add product</button>
-            <button className="px-2 py-1 border rounded" onClick={() => setShowBulkAdjust(true)}>Bulk adjust</button>
-            <button className="px-2 py-1 border rounded" onClick={exportCSV}>Export CSV</button>
-          </div>
-
-          <div className="border border-gray-200 p-2 rounded">
-            <h3 className="font-medium">Products</h3>
-            <PagedList
-              data={products}
-              page={page}
-              pageSize={pageSize}
-              totalCount={total}
-              loading={loading}
-              onPageChange={(p) => { setPage(p); fetchProducts({ page: p }); }}
-              renderRow={(p) => (
-                <tr className="border-t bg-white" key={p.productId}>
-                  <td className="p-2 text-sm">{p.productId}</td>
-                  <td className="p-2 text-sm">{p.name}</td>
-                  <td className="p-2 text-sm">{p.category}</td>
-                  <td className="p-2 text-sm">${(p.price || 0).toFixed(2)}</td>
-                  <td className="p-2 text-sm">
-                    <div className="flex flex-col">
-                      <div>{p.stockQuantity}</div>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <button className="px-2 py-1 border rounded text-xs" onClick={() => { const val = prompt('Set new stock quantity', String(p.stockQuantity)); if (val !== null) updateStock(p.productId, Number(val)); }}>Set</button>
-                        <button className="px-2 py-1 bg-blue-600 text-white rounded text-xs" onClick={() => { setEditingProduct(p); setShowProductModal(true); }}>Edit</button>
-                        <button className="px-2 py-1 border rounded text-xs" onClick={() => openAdjust(p)}>Adjust</button>
-                        <button className="px-2 py-1 border rounded text-xs text-red-600" onClick={() => removeProduct(p.productId)}>Delete</button>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="p-2 text-sm">{p.minStockLevel}</td>
-                  <td className="p-2 text-sm">{fmtDate(p.updatedAt || p.createdAt)}</td>
-                  <td className="p-2 text-sm">{p.isActive ? 'Active' : 'Inactive'}</td>
-                </tr>
-              )}
-            />
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 text-red-700">
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            {error}
           </div>
         </div>
-        <div className="flex-1">
-          <div className="border border-gray-200 p-2 mb-3 rounded">
-            <h4 className="font-medium">Low stock</h4>
-            {lowStock.length === 0 ? <div className="text-sm text-gray-500">No low stock products</div> : (
-              <ul className="text-sm">
-                {lowStock.map(p => (
-                  <li key={p.productId}>{p.productName} — {p.currentStock} (min {p.minStockLevel || p.lowStockThreshold})</li>
-                ))}
-              </ul>
-            )}
+      )}
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="xl:col-span-2 space-y-6">
+          {/* Search and Actions Bar */}
+          <div className="bg-white rounded-lg shadow p-4">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1">
+                <input 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500" 
+                  placeholder="Search products..." 
+                  value={search} 
+                  onChange={e => setSearch(e.target.value)} 
+                />
+              </div>
+              <div className="flex gap-2">
+                <button 
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors duration-200" 
+                  onClick={() => { setPage(1); fetchProducts({ page: 1 }); }}
+                >
+                  Search
+                </button>
+                <button 
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors duration-200" 
+                  onClick={() => { setEditingProduct(null); setShowProductModal(true); }}
+                >
+                  <svg className="w-4 h-4 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  Add Product
+                </button>
+                <button 
+                  className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors duration-200" 
+                  onClick={() => setShowBulkAdjust(true)}
+                >
+                  Bulk Adjust
+                </button>
+                <button 
+                  className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors duration-200" 
+                  onClick={exportCSV}
+                >
+                  Export CSV
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div className="border border-gray-200 p-2 rounded">
-            <h4 className="font-medium">Recent movements</h4>
-            <div className="mb-2 flex gap-2">
-              <select className="border rounded px-2 py-1 text-sm" onChange={e => fetchMovements({ page: 1, pageSize: 20, type: e.target.value || null })}>
-                <option value="">All types</option>
-                <option value="StockIn">Stock In</option>
-                <option value="StockOut">Stock Out</option>
-              </select>
-              <select className="border rounded px-2 py-1 text-sm" onChange={e => fetchMovements({ page: 1, pageSize: 20, productId: e.target.value || null })}>
-                <option value="">All products</option>
-                {products.map(p => <option key={p.productId} value={p.productId}>{p.name}</option>)}
-              </select>
-              <button className="px-2 py-1 border rounded text-sm" onClick={() => fetchMovements({ page: 1, pageSize: 20 })}>Refresh</button>
+          {/* Products Table */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900">Products</h3>
             </div>
-            {movementLoading ? <div>Loading...</div> : (
-              <div className="max-h-72 overflow-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="text-sm text-left"><th className="p-1">Date</th><th className="p-1">Product</th><th className="p-1">Qty</th><th className="p-1">By</th></tr>
-                  </thead>
-                  <tbody>
-                    {movements.map(m => (
-                      <tr key={m.movementId} className="text-sm border-t">
-                        <td className="whitespace-nowrap p-1">{fmtDate(m.movementDate)}</td>
-                        <td className="p-1">{m.productName}</td>
-                        <td className="p-1">{m.quantity} ({m.type})</td>
-                        <td className="p-1">{m.username}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <div className="overflow-hidden">
+              <PagedList
+                data={products}
+                page={page}
+                pageSize={pageSize}
+                totalCount={total}
+                loading={loading}
+                onPageChange={(p) => { setPage(p); fetchProducts({ page: p }); }}
+                tableHeaders={['ID', 'Name', 'Category', 'Price', 'Stock', 'Min Level', 'Updated', 'Status']}
+                renderRow={(p) => (
+                  <tr className="hover:bg-gray-50" key={p.productId}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      #{p.productId}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{p.name}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                        {p.category}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      ${(p.price || 0).toFixed(2)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900 mb-2">{p.stockQuantity}</div>
+                      <div className="flex flex-wrap gap-1">
+                        <button 
+                          className="inline-flex items-center px-2 py-1 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 transition-colors duration-200" 
+                          onClick={() => { const val = prompt('Set new stock quantity', String(p.stockQuantity)); if (val !== null) updateStock(p.productId, Number(val)); }}
+                        >
+                          Set
+                        </button>
+                        <button 
+                          className="inline-flex items-center px-2 py-1 border border-transparent text-xs font-medium rounded text-white bg-indigo-600 hover:bg-indigo-700 transition-colors duration-200" 
+                          onClick={() => { setEditingProduct(p); setShowProductModal(true); }}
+                        >
+                          Edit
+                        </button>
+                        <button 
+                          className="inline-flex items-center px-2 py-1 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 transition-colors duration-200" 
+                          onClick={() => openAdjust(p)}
+                        >
+                          Adjust
+                        </button>
+                        <button 
+                          className="inline-flex items-center px-2 py-1 border border-red-300 text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 transition-colors duration-200" 
+                          onClick={() => removeProduct(p.productId)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {p.minStockLevel}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {fmtDate(p.updatedAt || p.createdAt)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        p.isActive 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {p.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                  </tr>
+                )}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Low Stock Alert */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h4 className="text-lg font-medium text-gray-900">Low Stock Alert</h4>
+            </div>
+            <div className="p-6">
+              {lowStock.length === 0 ? (
+                <div className="text-center py-4">
+                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="mt-2 text-sm text-gray-500">No low stock products</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {lowStock.map(p => (
+                    <div key={p.productId} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">{p.productName}</div>
+                        <div className="text-xs text-red-600">
+                          Stock: {p.currentStock} (Min: {p.minStockLevel || p.lowStockThreshold})
+                        </div>
+                      </div>
+                      <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Recent Movements */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h4 className="text-lg font-medium text-gray-900">Recent Movements</h4>
+            </div>
+            <div className="p-6">
+              <div className="space-y-3 mb-4">
+                <select 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500" 
+                  onChange={e => fetchMovements({ page: 1, pageSize: 20, type: e.target.value || null })}
+                >
+                  <option value="">All types</option>
+                  <option value="StockIn">Stock In</option>
+                  <option value="StockOut">Stock Out</option>
+                </select>
+                <select 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500" 
+                  onChange={e => fetchMovements({ page: 1, pageSize: 20, productId: e.target.value || null })}
+                >
+                  <option value="">All products</option>
+                  {products.map(p => <option key={p.productId} value={p.productId}>{p.name}</option>)}
+                </select>
+                <button 
+                  className="w-full px-3 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors duration-200" 
+                  onClick={() => fetchMovements({ page: 1, pageSize: 20 })}
+                >
+                  Refresh
+                </button>
               </div>
-            )}
+
+              {movementLoading ? (
+                <div className="text-center py-4">
+                  <svg className="animate-spin mx-auto h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </div>
+              ) : (
+                <div className="max-h-80 overflow-y-auto">
+                  <div className="space-y-2">
+                    {movements.map(m => (
+                      <div key={m.movementId} className="p-3 border border-gray-200 rounded-lg">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="text-sm font-medium text-gray-900">{m.productName}</div>
+                            <div className="text-xs text-gray-500">{fmtDate(m.movementDate)}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className={`text-sm font-medium ${m.type === 'StockIn' ? 'text-green-600' : 'text-red-600'}`}>
+                              {m.type === 'StockIn' ? '+' : '-'}{Math.abs(m.quantity)}
+                            </div>
+                            <div className="text-xs text-gray-500">{m.username}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
