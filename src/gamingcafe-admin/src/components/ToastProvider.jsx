@@ -49,20 +49,20 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={{ push, remove }}>
       {children}
-      <div aria-live="polite" style={{ position: 'fixed', right: 18, top: 18, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div aria-live="polite" className="fixed right-4 top-4 z-50 flex flex-col gap-2">
         {toasts.map(t => {
           const bg = t.type === 'error' ? '#ef4444' : t.type === 'success' ? '#10b981' : t.type === 'warn' ? '#f59e0b' : '#374151';
           return (
-            <div key={t.id} role="status" style={{ minWidth: 260, maxWidth: 360, background: bg, color: '#fff', boxShadow: '0 8px 28px rgba(2,6,23,0.35)', borderRadius: 10, overflow: 'hidden', display: 'flex', alignItems: 'stretch' }}>
-              <div style={{ display: 'flex', alignItems: 'center', padding: '12px 12px', gap: 12 }}>
-                <div style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.95 }}>{ICONS[t.type] ?? ICONS.info}</div>
-                <div style={{ flex: 1, fontSize: 14, lineHeight: '18px' }}>{t.message}</div>
-                <button aria-label="dismiss" onClick={() => remove(t.id)} style={{ marginLeft: 12, background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.9)', cursor: 'pointer', padding: 8 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <div key={t.id} role="status" className="min-w-[260px] max-w-[360px] text-white shadow-xl rounded overflow-hidden flex flex-col">
+              <div className="flex items-center px-3 py-2 gap-3" style={{ background: bg }}>
+                <div className="w-7 h-7 flex items-center justify-center opacity-95">{ICONS[t.type] ?? ICONS.info}</div>
+                <div className="flex-1 text-sm leading-5">{t.message}</div>
+                <button aria-label="dismiss" onClick={() => remove(t.id)} className="ml-3 p-2 text-white/90">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </button>
               </div>
-              <div style={{ height: 4, background: 'rgba(255,255,255,0.12)' }}>
-                <div style={{ height: '100%', background: 'rgba(255,255,255,0.9)', animation: `toast-progress ${t.duration}ms linear forwards` }} />
+              <div className="h-1 bg-white/10">
+                <div className="h-full bg-white" style={{ width: '100%', animation: `toast-progress ${t.duration}ms linear forwards` }} />
               </div>
             </div>
           );

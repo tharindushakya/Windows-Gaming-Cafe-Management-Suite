@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 export default function ProductForm({ initial = {}, onCancel, onSubmit, errors = {} }) {
-  const [form, setForm] = useState({
-    name: '', description: '', price: 0, category: '', stockQuantity: 0, minStockLevel: 0, isActive: true
-  });
+  const [form, setForm] = useState({ name: '', description: '', price: 0, category: '', stockQuantity: 0, minStockLevel: 0, isActive: true });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { setForm(f => ({ ...f, ...initial })); }, [initial]);
@@ -22,22 +20,51 @@ export default function ProductForm({ initial = {}, onCancel, onSubmit, errors =
   }
 
   return (
-    <form onSubmit={submit} style={{ padding: 8 }}>
-      <div style={{ display: 'grid', gap: 8 }}>
-  <label>Name<input name="name" value={form.name} onChange={change} className="input" required /></label>
-  {errors?.name && <div style={{ color: '#ef4444' }}>{errors.name.join(', ')}</div>}
-        <label>Category<input name="category" value={form.category} onChange={change} className="input" required /></label>
-  <label>Price<input name="price" type="number" step="0.01" value={form.price} onChange={change} className="input" required /></label>
-  {errors?.price && <div style={{ color: '#ef4444' }}>{errors.price.join(', ')}</div>}
-        <label>Stock Quantity<input name="stockQuantity" type="number" value={form.stockQuantity} onChange={change} className="input" /></label>
-        <label>Min Stock Level<input name="minStockLevel" type="number" value={form.minStockLevel} onChange={change} className="input" /></label>
-        <label>Description<textarea name="description" value={form.description} onChange={change} className="input" /></label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}><input name="isActive" type="checkbox" checked={form.isActive} onChange={change} /> Active</label>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" onClick={onCancel} disabled={saving}>Cancel</button>
-          <button type="submit" style={{ background: '#0ea5a9', color: '#fff' }} disabled={saving}>{saving ? 'Saving...' : 'Save'}</button>
+    <form onSubmit={submit} className="p-2">
+      <div className="grid gap-2">
+        <label className="flex flex-col">
+          <span className="font-medium text-sm">Name</span>
+          <input name="name" value={form.name} onChange={change} className="border rounded px-2 py-1 w-full" required />
+        </label>
+        {errors?.name && <div className="text-red-500 text-sm">{errors.name.join(', ')}</div>}
+
+        <label className="flex flex-col">
+          <span className="font-medium text-sm">Category</span>
+          <input name="category" value={form.category} onChange={change} className="border rounded px-2 py-1 w-full" required />
+        </label>
+
+        <label className="flex flex-col">
+          <span className="font-medium text-sm">Price</span>
+          <input name="price" type="number" step="0.01" value={form.price} onChange={change} className="border rounded px-2 py-1 w-full" required />
+        </label>
+        {errors?.price && <div className="text-red-500 text-sm">{errors.price.join(', ')}</div>}
+
+        <label className="flex flex-col">
+          <span className="font-medium text-sm">Stock Quantity</span>
+          <input name="stockQuantity" type="number" value={form.stockQuantity} onChange={change} className="border rounded px-2 py-1 w-full" />
+        </label>
+
+        <label className="flex flex-col">
+          <span className="font-medium text-sm">Min Stock Level</span>
+          <input name="minStockLevel" type="number" value={form.minStockLevel} onChange={change} className="border rounded px-2 py-1 w-full" />
+        </label>
+
+        <label className="flex flex-col">
+          <span className="font-medium text-sm">Description</span>
+          <textarea name="description" value={form.description} onChange={change} className="border rounded px-2 py-1 w-full" />
+        </label>
+
+        <label className="flex items-center gap-2">
+          <input name="isActive" type="checkbox" checked={form.isActive} onChange={change} className="h-4 w-4" />
+          <span className="text-sm">Active</span>
+        </label>
+
+        <div className="flex gap-2 mt-2">
+          <button type="button" onClick={onCancel} disabled={saving} className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300">Cancel</button>
+          <button type="submit" disabled={saving} className="px-3 py-1 rounded bg-teal-500 text-white hover:bg-teal-600 disabled:opacity-50">{saving ? 'Saving...' : 'Save'}</button>
         </div>
-        {errors?._global && <div style={{ color: '#ef4444', marginTop: 8 }}>{errors._global.join(', ')}</div>}
+
+        {errors?._global && <div className="text-red-500 text-sm mt-2">{errors._global.join(', ')}</div>}
       </div>
     </form>
   );

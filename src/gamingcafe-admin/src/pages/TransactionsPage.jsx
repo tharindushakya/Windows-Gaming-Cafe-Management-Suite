@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import api from '../api';
 import SimpleModal from '../components/SimpleModal';
 import TransactionForm from '../components/TransactionForm';
@@ -33,7 +33,18 @@ export default function TransactionsPage() {
     } finally { setLoading(false); }
   }, [pageSize, toast]);
 
-  useEffect(() => { fetch(page); }, [fetch, page]);
+  // Debounce fetch to avoid bursts that can trigger server rate limits
+  const fetchTimeoutRef = useRef(null);
+  useEffect(() => {
+    if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
+    fetchTimeoutRef.current = setTimeout(() => {
+      fetch(page);
+    }, 250);
+
+    return () => {
+      if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
+    };
+  }, [fetch, page]);
 
   function openCreate() { setEditing(null); setShowModal(true); }
   function openEdit(t) { setEditing(t); setShowModal(true); }

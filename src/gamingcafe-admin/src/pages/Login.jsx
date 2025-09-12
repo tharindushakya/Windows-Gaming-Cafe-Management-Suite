@@ -18,48 +18,52 @@ export default function Login({ onSuccess }) {
     setError(null);
     if (!email || !password) {
       setError('Email and password are required');
+      toast.push('Email and password are required', 'error');
       return;
     }
     setLoading(true);
     try {
       await login(email, password);
+      toast.push('Signed in successfully', 'success');
       if (typeof onSuccess === 'function') {
         onSuccess();
       } else {
         nav('/');
       }
     } catch (err) {
-      setError(err?.data?.message || err.message || 'Login failed');
+      const msg = err?.data?.message || err.message || 'Login failed';
+      setError(msg);
+      toast.push(msg, 'error');
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a' }}>
-      <div style={{ width: 420, background: '#fff', borderRadius: 8, padding: 24, boxShadow: '0 6px 24px rgba(2,6,23,0.6)' }}>
-        <h2 style={{ marginTop: 0, marginBottom: 8 }}>GamingCafe Admin</h2>
-        <p style={{ marginTop: 0, color: '#475569' }}>Sign in to manage stations, users, wallets and reports.</p>
+    <div className="min-h-screen flex items-center justify-center bg-slate-900">
+      <div className="w-[420px] bg-white rounded-lg p-6 shadow-2xl">
+        <h2 className="mt-0 mb-2 text-2xl font-semibold">GamingCafe Admin</h2>
+        <p className="mt-0 text-gray-600">Sign in to manage stations, users, wallets and reports.</p>
         <form onSubmit={submit}>
-          <div style={{ marginTop: 12 }}>
-            <label style={{ display: 'block', fontSize: 13 }}>Email</label>
-            <input value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 4, border: '1px solid #cbd5e1' }} />
+          <div className="mt-3">
+            <label className="block text-sm">Email</label>
+            <input value={email} onChange={e => setEmail(e.target.value)} className="w-full px-3 py-2 rounded border border-gray-300" />
           </div>
-          <div style={{ marginTop: 12 }}>
-            <label style={{ display: 'block', fontSize: 13 }}>Password</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 4, border: '1px solid #cbd5e1' }} />
+          <div className="mt-3">
+            <label className="block text-sm">Password</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-3 py-2 rounded border border-gray-300" />
           </div>
-          <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} /> Remember me
+          <div className="mt-3 flex items-center justify-between">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} className="mr-1" /> Remember me
             </label>
-            <button type="button" onClick={() => toast.push('Password reset not implemented', 'info')} style={{ background: 'none', border: 'none', color: '#2563eb', textDecoration: 'underline', cursor: 'pointer' }}>Forgot password?</button>
+            <button type="button" onClick={() => toast.push('Password reset not implemented', 'info')} className="text-sm text-sky-600 underline">Forgot password?</button>
           </div>
 
-          {error && <div style={{ color: 'red', marginTop: 12 }}>{error}</div>}
+          {error && <div className="text-red-500 mt-3">{error}</div>}
 
-          <div style={{ marginTop: 16 }}>
-            <button type="submit" disabled={loading} style={{ width: '100%', padding: '10px 12px', background: '#0ea5a9', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+          <div className="mt-4">
+            <button type="submit" disabled={loading} className="w-full px-3 py-2 bg-teal-500 text-white rounded hover:bg-teal-600 disabled:opacity-50">
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
           </div>

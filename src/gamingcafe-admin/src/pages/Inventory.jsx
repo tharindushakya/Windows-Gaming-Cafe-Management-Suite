@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import api from '../api';
+import { useToast } from '../components/ToastProvider';
 import ProductForm from '../components/ProductForm';
 import SimpleModal from '../components/SimpleModal';
 import PagedList from '../components/PagedList';
@@ -39,6 +40,7 @@ export default function Inventory() {
   const [bulkText, setBulkText] = useState('productId,quantityChange,reason\n');
 
   const [error, setError] = useState(null);
+  const toast = useToast();
 
   // fetch products (supports PagedResponse or plain array)
   const fetchProducts = useCallback(async (opts = {}) => {
@@ -110,8 +112,10 @@ export default function Inventory() {
       setEditingProduct(null);
       fetchProducts();
       fetchLowStock();
+  toast?.push('Product saved', 'success');
     } catch (err) {
       setProductErrors(err?.errors || { _global: [err?.message || 'Save failed'] });
+  toast?.push(err?.message || 'Save failed', 'error');
       throw err;
     }
   }
@@ -122,6 +126,7 @@ export default function Inventory() {
       await api.del(`/api/v1.0/products/${id}`);
       fetchProducts();
       fetchLowStock();
+  toast?.push('Product deleted', 'success');
     } catch (err) { setError(err?.message || 'Delete failed'); }
   }
 
@@ -144,8 +149,10 @@ export default function Inventory() {
       fetchProducts();
       fetchLowStock();
       fetchMovements();
+  toast?.push('Inventory adjusted', 'success');
     } catch (err) {
       setError(err?.data?.message || err?.message || 'Adjustment failed');
+  toast?.push(err?.message || 'Adjustment failed', 'error');
     }
   }
 
@@ -169,6 +176,7 @@ export default function Inventory() {
       await api.post('/api/v1.0/inventory/bulk-adjust', { adjustments });
       setShowBulkAdjust(false);
       fetchProducts(); fetchLowStock(); fetchMovements();
+  toast?.push('Bulk adjustments applied', 'success');
     } catch (err) { setError(err?.message || 'Bulk adjust failed'); }
   }
 
@@ -186,6 +194,7 @@ export default function Inventory() {
         throw new Error(txt || res.statusText || 'Failed to update stock');
       }
       fetchProducts(); fetchLowStock();
+  toast?.push('Stock updated', 'success');
     } catch (err) { setError(err?.message || 'Failed to update stock'); }
   }
 

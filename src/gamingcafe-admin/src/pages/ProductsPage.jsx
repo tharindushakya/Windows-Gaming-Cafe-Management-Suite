@@ -65,38 +65,38 @@ export default function ProductsPage() {
   }
 
   return (
-    <div style={{ padding: 16 }}>
-      <h2>Products</h2>
-      <div style={{ marginBottom: 12 }}>
+    <div className="p-4">
+      <h2 className="text-lg font-semibold mb-3">Products</h2>
+      <div className="mb-3">
         {hasRole('Staff') || hasRole('Admin') ? (
-          <button onClick={openCreate}>Create product</button>
+          <button onClick={openCreate} className="px-3 py-2 rounded bg-sky-500 text-white">Create product</button>
         ) : (
-          <span style={{ color: '#666' }}>You don't have permission to create products</span>
+          <span className="text-gray-500">You don't have permission to create products</span>
         )}
       </div>
 
   <PagedList data={data} page={page} pageSize={pageSize} totalCount={totalCount} onPageChange={setPage} loading={loading}
         renderRow={p => (
           <tr>
-            <td style={{ padding: 8 }}>{p.productId}</td>
-            <td style={{ padding: 8 }}>{p.category}</td>
-            <td style={{ padding: 8, textAlign: 'right' }}>{(p.price ?? 0).toFixed(2)}</td>
-            <td style={{ padding: 8, textAlign: 'right' }}>{p.stockQuantity ?? 0}</td>
-              <td style={{ padding: 8, textAlign: 'right' }}>
+            <td className="px-3 py-2">{p.productId}</td>
+            <td className="px-3 py-2">{p.category}</td>
+            <td className="px-3 py-2 text-right">{(p.price ?? 0).toFixed(2)}</td>
+            <td className="px-3 py-2 text-right">{p.stockQuantity ?? 0}</td>
+              <td className="px-3 py-2 text-right">
               {hasRole('Staff') || hasRole('Admin') ? (
                 <>
-                  <button onClick={() => openEdit(p)} style={{ marginRight: 8 }}>Edit</button>
-                  <button onClick={() => askDelete(p)}>Delete</button>
+                  <button onClick={() => openEdit(p)} className="mr-2 px-2 py-1 border rounded text-sm">Edit</button>
+                  <button onClick={() => askDelete(p)} className="px-2 py-1 border rounded text-sm text-red-600">Delete</button>
                 </>
               ) : (
-                <span style={{ color: '#666' }}>Restricted</span>
+                <span className="text-gray-500">Restricted</span>
               )}
             </td>
           </tr>
         )}
       />
 
-      {loading && <div style={{ marginTop: 8 }}><LoadingSpinner /></div>}
+      {loading && <div className="mt-2"><LoadingSpinner /></div>}
 
       {showModal && (
         <SimpleModal title={editing ? 'Edit product' : 'Create product'} onClose={() => setShowModal(false)}>

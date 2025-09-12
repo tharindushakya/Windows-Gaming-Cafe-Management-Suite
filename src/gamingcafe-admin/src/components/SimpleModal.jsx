@@ -2,13 +2,13 @@ import React from 'react';
 
 export default function SimpleModal({ title, children, onClose }) {
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: '#fff', borderRadius: 6, width: 600, maxWidth: '95%', padding: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0 }}>{title}</h3>
-          <button onClick={onClose}>✕</button>
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="bg-white rounded-md w-[600px] max-w-[95%] p-4 shadow-lg">
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-medium m-0">{title}</h3>
+          <button onClick={onClose} className="text-gray-600 hover:text-gray-800 px-2">✕</button>
         </div>
-        <div style={{ marginTop: 12 }}>{children}</div>
+        <div className="mt-3">{children}</div>
       </div>
     </div>
   );

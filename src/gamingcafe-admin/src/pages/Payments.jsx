@@ -62,6 +62,8 @@ export default function Payments() {
   // Debounced search state
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const searchTimeoutRef = useRef(null);
+  // Debounce fetch requests to avoid bursts (throttle network calls)
+  const fetchTimeoutRef = useRef(null);
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
@@ -131,9 +133,21 @@ export default function Payments() {
     }
   }, [filters.startDate, filters.endDate]);
 
-  // Load transactions when page, pageSize, or filters change
+  // Load transactions when page, pageSize, or filters change (debounced)
   useEffect(() => {
-    fetchTransactions();
+    if (fetchTimeoutRef.current) {
+      clearTimeout(fetchTimeoutRef.current);
+    }
+    // small delay to collapse rapid changes (typing, filter toggles)
+    fetchTimeoutRef.current = setTimeout(() => {
+      fetchTransactions();
+    }, 250);
+
+    return () => {
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+      }
+    };
   }, [fetchTransactions]);
 
   // Load stats when relevant filters change
@@ -701,56 +715,24 @@ export default function Payments() {
           )}
 
           {modalType === 'create' && (
-            <div style={{ padding: '16px' }}>
-              <div style={{ display: 'grid', gap: '16px' }}>
+            <div className="p-4">
+              <div className="grid gap-4">
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
-                    User ID *
-                  </label>
-                  <input
-                    type="number"
-                    value={createForm.userId}
-                    onChange={(e) => setCreateForm(prev => ({ ...prev, userId: e.target.value }))}
-                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-                    placeholder="Enter user ID"
-                  />
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">User ID *</label>
+                  <input type="number" value={createForm.userId} onChange={(e) => setCreateForm(prev => ({ ...prev, userId: e.target.value }))} placeholder="Enter user ID" className="w-full px-3 py-2 border border-gray-300 rounded-md" />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
-                    Description *
-                  </label>
-                  <input
-                    type="text"
-                    value={createForm.description}
-                    onChange={(e) => setCreateForm(prev => ({ ...prev, description: e.target.value }))}
-                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-                    placeholder="Transaction description"
-                  />
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Description *</label>
+                  <input type="text" value={createForm.description} onChange={(e) => setCreateForm(prev => ({ ...prev, description: e.target.value }))} placeholder="Transaction description" className="w-full px-3 py-2 border border-gray-300 rounded-md" />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
-                      Amount *
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={createForm.amount}
-                      onChange={(e) => setCreateForm(prev => ({ ...prev, amount: e.target.value }))}
-                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-                      placeholder="0.00"
-                    />
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Amount *</label>
+                    <input type="number" step="0.01" min="0" value={createForm.amount} onChange={(e) => setCreateForm(prev => ({ ...prev, amount: e.target.value }))} placeholder="0.00" className="w-full px-3 py-2 border border-gray-300 rounded-md" />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
-                      Type
-                    </label>
-                    <select
-                      value={createForm.type}
-                      onChange={(e) => setCreateForm(prev => ({ ...prev, type: e.target.value }))}
-                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-                    >
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Type</label>
+                    <select value={createForm.type} onChange={(e) => setCreateForm(prev => ({ ...prev, type: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md">
                       <option value="GameTime">Game Time</option>
                       <option value="Product">Product</option>
                       <option value="WalletTopup">Wallet Top-up</option>
@@ -759,14 +741,8 @@ export default function Payments() {
                   </div>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
-                    Payment Method
-                  </label>
-                  <select
-                    value={createForm.paymentMethod}
-                    onChange={(e) => setCreateForm(prev => ({ ...prev, paymentMethod: e.target.value }))}
-                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-                  >
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Payment Method</label>
+                  <select value={createForm.paymentMethod} onChange={(e) => setCreateForm(prev => ({ ...prev, paymentMethod: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md">
                     <option value="Cash">Cash</option>
                     <option value="CreditCard">Credit Card</option>
                     <option value="DebitCard">Debit Card</option>
@@ -776,116 +752,54 @@ export default function Payments() {
                   </select>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
-                    Payment Reference
-                  </label>
-                  <input
-                    type="text"
-                    value={createForm.paymentReference}
-                    onChange={(e) => setCreateForm(prev => ({ ...prev, paymentReference: e.target.value }))}
-                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-                    placeholder="Optional payment reference"
-                  />
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Payment Reference</label>
+                  <input type="text" value={createForm.paymentReference} onChange={(e) => setCreateForm(prev => ({ ...prev, paymentReference: e.target.value }))} placeholder="Optional payment reference" className="w-full px-3 py-2 border border-gray-300 rounded-md" />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
-                    Notes
-                  </label>
-                  <textarea
-                    value={createForm.notes}
-                    onChange={(e) => setCreateForm(prev => ({ ...prev, notes: e.target.value }))}
-                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', minHeight: '80px' }}
-                    placeholder="Optional notes"
-                  />
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Notes</label>
+                  <textarea value={createForm.notes} onChange={(e) => setCreateForm(prev => ({ ...prev, notes: e.target.value }))} placeholder="Optional notes" className="w-full px-3 py-2 border border-gray-300 rounded-md min-h-[80px]" />
                 </div>
-                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                  <button
-                    onClick={closeModal}
-                    style={{ padding: '8px 16px', background: '#6b7280', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={createTransaction}
-                    style={{ padding: '8px 16px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
-                  >
-                    Create Transaction
-                  </button>
+                <div className="flex gap-3 justify-end">
+                  <button onClick={closeModal} className="px-4 py-2 bg-gray-500 text-white rounded-md">Cancel</button>
+                  <button onClick={createTransaction} className="px-4 py-2 bg-emerald-600 text-white rounded-md">Create Transaction</button>
                 </div>
               </div>
             </div>
           )}
 
           {modalType === 'refund' && selectedTransaction && (
-            <div style={{ padding: '16px' }}>
-              <div style={{ marginBottom: '16px', padding: '12px', background: '#fef3c7', borderRadius: '6px', border: '1px solid #f59e0b' }}>
-                <div style={{ fontWeight: '600', color: '#92400e' }}>Refunding Transaction #{selectedTransaction.transactionId}</div>
-                <div style={{ fontSize: '14px', color: '#92400e', marginTop: '4px' }}>
-                  Original Amount: {fmtAmount(selectedTransaction.amount)}
-                </div>
+            <div className="p-4">
+              <div className="mb-4 p-3 rounded border border-amber-300 bg-amber-50">
+                <div className="font-semibold text-amber-800">Refunding Transaction #{selectedTransaction.transactionId}</div>
+                <div className="text-sm text-amber-800 mt-1">Original Amount: {fmtAmount(selectedTransaction.amount)}</div>
               </div>
-              <div style={{ display: 'grid', gap: '16px' }}>
+              <div className="grid gap-4">
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
-                    Refund Amount *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max={selectedTransaction.amount}
-                    value={refundForm.refundAmount}
-                    onChange={(e) => setRefundForm(prev => ({ ...prev, refundAmount: e.target.value }))}
-                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-                  />
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Refund Amount *</label>
+                  <input type="number" step="0.01" min="0" max={selectedTransaction.amount} value={refundForm.refundAmount} onChange={(e) => setRefundForm(prev => ({ ...prev, refundAmount: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md" />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
-                    Reason *
-                  </label>
-                  <textarea
-                    value={refundForm.reason}
-                    onChange={(e) => setRefundForm(prev => ({ ...prev, reason: e.target.value }))}
-                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', minHeight: '80px' }}
-                    placeholder="Reason for refund"
-                  />
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Reason *</label>
+                  <textarea value={refundForm.reason} onChange={(e) => setRefundForm(prev => ({ ...prev, reason: e.target.value }))} placeholder="Reason for refund" className="w-full px-3 py-2 border border-gray-300 rounded-md min-h-[80px]" />
                 </div>
-                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                  <button
-                    onClick={closeModal}
-                    style={{ padding: '8px 16px', background: '#6b7280', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={processRefund}
-                    style={{ padding: '8px 16px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
-                  >
-                    Process Refund
-                  </button>
+                <div className="flex gap-3 justify-end">
+                  <button onClick={closeModal} className="px-4 py-2 bg-gray-500 text-white rounded-md">Cancel</button>
+                  <button onClick={processRefund} className="px-4 py-2 bg-red-500 text-white rounded-md">Process Refund</button>
                 </div>
               </div>
             </div>
           )}
 
           {modalType === 'status' && selectedTransaction && (
-            <div style={{ padding: '16px' }}>
-              <div style={{ marginBottom: '16px', padding: '12px', background: '#f0f9ff', borderRadius: '6px', border: '1px solid #0ea5e9' }}>
-                <div style={{ fontWeight: '600', color: '#0c4a6e' }}>Update Transaction #{selectedTransaction.transactionId}</div>
-                <div style={{ fontSize: '14px', color: '#0c4a6e', marginTop: '4px' }}>
-                  Current Status: {selectedTransaction.status}
-                </div>
+            <div className="p-4">
+              <div className="mb-4 p-3 rounded border border-sky-200 bg-sky-50">
+                <div className="font-semibold text-sky-800">Update Transaction #{selectedTransaction.transactionId}</div>
+                <div className="text-sm text-sky-800 mt-1">Current Status: {selectedTransaction.status}</div>
               </div>
-              <div style={{ display: 'grid', gap: '16px' }}>
+              <div className="grid gap-4">
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
-                    New Status *
-                  </label>
-                  <select
-                    value={statusForm.status}
-                    onChange={(e) => setStatusForm(prev => ({ ...prev, status: e.target.value }))}
-                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-                  >
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">New Status *</label>
+                  <select value={statusForm.status} onChange={(e) => setStatusForm(prev => ({ ...prev, status: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md">
                     <option value="Pending">Pending</option>
                     <option value="Completed">Completed</option>
                     <option value="Failed">Failed</option>
@@ -893,29 +807,12 @@ export default function Payments() {
                   </select>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
-                    Notes
-                  </label>
-                  <textarea
-                    value={statusForm.notes}
-                    onChange={(e) => setStatusForm(prev => ({ ...prev, notes: e.target.value }))}
-                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', minHeight: '80px' }}
-                    placeholder="Optional notes about status change"
-                  />
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Notes</label>
+                  <textarea value={statusForm.notes} onChange={(e) => setStatusForm(prev => ({ ...prev, notes: e.target.value }))} placeholder="Optional notes about status change" className="w-full px-3 py-2 border border-gray-300 rounded-md min-h-[80px]" />
                 </div>
-                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                  <button
-                    onClick={closeModal}
-                    style={{ padding: '8px 16px', background: '#6b7280', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={updateStatus}
-                    style={{ padding: '8px 16px', background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
-                  >
-                    Update Status
-                  </button>
+                <div className="flex gap-3 justify-end">
+                  <button onClick={closeModal} className="px-4 py-2 bg-gray-500 text-white rounded-md">Cancel</button>
+                  <button onClick={updateStatus} className="px-4 py-2 bg-sky-500 text-white rounded-md">Update Status</button>
                 </div>
               </div>
             </div>
