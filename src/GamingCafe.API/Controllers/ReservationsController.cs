@@ -64,26 +64,39 @@ public class ReservationsController : ControllerBase
             filteredReservations = filteredReservations.OrderByDescending(r => r.CreatedAt);
 
             var totalCount = filteredReservations.Count();
-            var pagedReservations = filteredReservations
+            var pageEntities = filteredReservations
                 .Skip((request.Page - 1) * request.PageSize)
                 .Take(request.PageSize)
-                .Select(r => new ReservationDto
-                {
-                    ReservationId = r.ReservationId,
-                    UserId = r.UserId,
-                    StationId = r.StationId,
-                    ReservationDate = r.ReservationDate,
-                    StartTime = r.StartTime,
-                    EndTime = r.EndTime,
-                    Status = r.Status.ToString(),
-                    EstimatedCost = r.EstimatedCost,
-                    Notes = r.Notes,
-                    CreatedAt = r.CreatedAt,
-                    CancelledAt = r.CancelledAt,
-                    Username = r.User.Username,
-                    StationName = r.Station.StationName
-                })
                 .ToList();
+
+            // Load related users and stations to avoid projecting navigation properties in the EF query
+            var userIds = pageEntities.Select(r => r.UserId).Distinct().ToList();
+            var stationIds = pageEntities.Select(r => r.StationId).Distinct().ToList();
+
+            var users = (await _unitOfWork.Repository<User>().GetAllAsync())
+                .Where(u => userIds.Contains(u.UserId))
+                .ToDictionary(u => u.UserId, u => u.Username);
+
+            var stationsDict = (await _unitOfWork.Repository<GameStation>().GetAllAsync())
+                .Where(s => stationIds.Contains(s.StationId))
+                .ToDictionary(s => s.StationId, s => s.StationName);
+
+            var pagedReservations = pageEntities.Select(r => new ReservationDto
+            {
+                ReservationId = r.ReservationId,
+                UserId = r.UserId,
+                StationId = r.StationId,
+                ReservationDate = r.ReservationDate,
+                StartTime = r.StartTime,
+                EndTime = r.EndTime,
+                Status = r.Status.ToString(),
+                EstimatedCost = r.EstimatedCost,
+                Notes = r.Notes,
+                CreatedAt = r.CreatedAt,
+                CancelledAt = r.CancelledAt,
+                Username = users.ContainsKey(r.UserId) ? users[r.UserId] : "Unknown",
+                StationName = stationsDict.ContainsKey(r.StationId) ? stationsDict[r.StationId] : "Unknown"
+            }).ToList();
 
             var response = new PagedResponse<ReservationDto>
             {
@@ -128,8 +141,8 @@ public class ReservationsController : ControllerBase
                 Notes = reservation.Notes,
                 CreatedAt = reservation.CreatedAt,
                 CancelledAt = reservation.CancelledAt,
-                Username = reservation.User.Username,
-                StationName = reservation.Station.StationName
+                Username = reservation.User != null ? reservation.User.Username : "Unknown",
+                StationName = reservation.Station != null ? reservation.Station.StationName : "Unknown"
             };
 
             return Ok(reservationDto);
@@ -165,11 +178,17 @@ public class ReservationsController : ControllerBase
             if (!station.IsActive)
                 return BadRequest("Game station is not active");
 
+            // Normalize incoming DateTime values to UTC to avoid database errors with timestamptz
+            // Convert DateTimeOffset to UTC DateTime for storage (timestamptz expects UTC)
+            DateTime startUtc = request.StartTime.ToUniversalTime().UtcDateTime;
+            DateTime endUtc = request.EndTime.ToUniversalTime().UtcDateTime;
+            var reservationDateUtc = request.ReservationDate.ToUniversalTime().UtcDateTime.Date;
+
             // Validate time slot
-            if (request.StartTime >= request.EndTime)
+            if (startUtc >= endUtc)
                 return BadRequest("Start time must be before end time");
 
-            if (request.ReservationDate.Date < DateTime.Today)
+            if (reservationDateUtc.Date < DateTime.UtcNow.Date)
                 return BadRequest("Cannot make reservations for past dates");
 
             // Check for conflicts
@@ -188,16 +207,16 @@ public class ReservationsController : ControllerBase
                 return BadRequest("Time slot conflicts with existing reservation");
 
             // Calculate cost
-            var duration = request.EndTime - request.StartTime;
+            var duration = endUtc - startUtc;
             var estimatedCost = (decimal)duration.TotalHours * station.HourlyRate;
 
             var reservation = new Reservation
             {
                 UserId = request.UserId,
                 StationId = request.StationId,
-                ReservationDate = request.ReservationDate.Date,
-                StartTime = request.StartTime,
-                EndTime = request.EndTime,
+                ReservationDate = reservationDateUtc,
+                StartTime = startUtc,
+                EndTime = endUtc,
                 Status = ReservationStatus.Pending,
                 EstimatedCost = estimatedCost,
                 Notes = request.Notes!,
@@ -226,8 +245,11 @@ public class ReservationsController : ControllerBase
 
             _logger.LogInformation("Created new reservation: {ReservationId} for user {UserId} at station {StationId}", 
                 reservation.ReservationId, request.UserId, request.StationId);
-            
-            return CreatedAtAction(nameof(GetReservation), new { id = reservation.ReservationId }, reservationDto);
+
+            // When using API versioning with route token {version:apiVersion}, include the version route value
+            // Build a simple absolute-ish location that matches our route template to avoid route generation issues
+            var location = $"/api/v1.0/reservations/{reservation.ReservationId}";
+            return Created(location, reservationDto);
         }
         catch (Exception ex)
         {
@@ -372,26 +394,27 @@ public class GetReservationsRequest
     public DateTime? EndDate { get; set; }
 }
 
-public class CreateReservationRequest
-{
-    [Required]
-    public int UserId { get; set; }
+    public class CreateReservationRequest
+    {
+        [Required]
+        public int UserId { get; set; }
 
-    [Required]
-    public int StationId { get; set; }
+        [Required]
+        public int StationId { get; set; }
 
-    [Required]
-    public DateTime ReservationDate { get; set; }
+        // Use DateTimeOffset for incoming date/time values so timezones are preserved
+        [Required]
+        public DateTimeOffset ReservationDate { get; set; }
 
-    [Required]
-    public DateTime StartTime { get; set; }
+        [Required]
+        public DateTimeOffset StartTime { get; set; }
 
-    [Required]
-    public DateTime EndTime { get; set; }
+        [Required]
+        public DateTimeOffset EndTime { get; set; }
 
-    [StringLength(500)]
-    public string? Notes { get; set; }
-}
+        [StringLength(500)]
+        public string? Notes { get; set; }
+    }
 
 public class UpdateReservationStatusRequest
 {

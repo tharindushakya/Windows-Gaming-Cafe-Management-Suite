@@ -13,6 +13,7 @@ public interface IStationService
     Task<bool> DeleteStationAsync(int stationId);
     Task<bool> StartSessionAsync(int stationId, int userId, decimal hourlyRate);
     Task<bool> EndSessionAsync(int stationId);
+    Task<bool> ToggleAvailabilityAsync(int stationId);
     Task<IEnumerable<GameStation>> GetAvailableStationsAsync();
 }
 
@@ -23,6 +24,34 @@ public class StationService : IStationService
     public StationService(GamingCafeContext context)
     {
         _context = context;
+    }
+
+    // Toggle availability without creating/ending a session. This is used by the admin UI
+    // for quick availability flips. It will clear CurrentUserId/SessionStartTime when marking
+    // available, and set SessionStartTime when marking unavailable (but will not create a GameSession record).
+    public async Task<bool> ToggleAvailabilityAsync(int stationId)
+    {
+        var station = await GetStationByIdAsync(stationId);
+        if (station == null) return false;
+
+        // Flip availability
+        var newAvailable = !station.IsAvailable;
+        station.IsAvailable = newAvailable;
+
+        if (newAvailable)
+        {
+            // Mark available: clear any current user/session info
+            station.CurrentUserId = null;
+            station.SessionStartTime = null;
+        }
+        else
+        {
+            // Mark in use: set a session start timestamp; do not assign a user here
+            station.SessionStartTime = DateTime.UtcNow;
+        }
+
+        await _context.SaveChangesAsync();
+        return true;
     }
 
     public async Task<IEnumerable<GameStation>> GetAllStationsAsync()

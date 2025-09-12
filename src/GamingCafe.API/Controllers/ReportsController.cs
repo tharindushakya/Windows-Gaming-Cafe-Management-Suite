@@ -67,8 +67,9 @@ public class ReportsController : ControllerBase
                 TotalSessions = periodSessions.Count(),
                 ActiveSessions = sessions.Count(s => s.Status == SessionStatus.Active),
                 CompletedSessions = periodSessions.Count(s => s.Status == SessionStatus.Completed),
-                AverageSessionDuration = periodSessions.Where(s => s.Duration.HasValue)
-                    .Average(s => s.Duration!.Value.TotalMinutes),
+                AverageSessionDuration = periodSessions.Where(s => s.Duration.HasValue).Any()
+                    ? periodSessions.Where(s => s.Duration.HasValue).Average(s => s.Duration!.Value.TotalMinutes)
+                    : 0,
 
                 // Financial Statistics
                 TotalRevenue = periodTransactions.Where(t => t.Status == TransactionStatus.Completed && t.Type != TransactionType.Refund)

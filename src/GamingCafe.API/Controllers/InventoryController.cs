@@ -4,6 +4,7 @@ using Asp.Versioning;
 using GamingCafe.Core.Models;
 using GamingCafe.Core.Interfaces;
 using GamingCafe.Data.Repositories;
+using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
 
 namespace GamingCafe.API.Controllers;
@@ -58,9 +59,10 @@ public class InventoryController : ControllerBase
 
             if (!string.IsNullOrEmpty(request.SearchTerm))
             {
-                filteredMovements = filteredMovements.Where(m => 
-                    m.Product.Name.ToLower().Contains(request.SearchTerm.ToLower()) ||
-                    m.Reason.ToLower().Contains(request.SearchTerm.ToLower()));
+                var term = request.SearchTerm.ToLower();
+                filteredMovements = filteredMovements.Where(m =>
+                    (m.Product != null && !string.IsNullOrEmpty(m.Product.Name) && m.Product.Name.ToLower().Contains(term)) ||
+                    (!string.IsNullOrEmpty(m.Reason) && m.Reason.ToLower().Contains(term)));
             }
 
             // Apply sorting
@@ -81,23 +83,27 @@ public class InventoryController : ControllerBase
                 _ => filteredMovements.OrderByDescending(m => m.MovementDate)
             };
 
+            // Ensure related entities are included before materializing
+            filteredMovements = filteredMovements.Include(m => m.Product).Include(m => m.User);
+
             var totalCount = filteredMovements.Count();
-            var pagedMovements = filteredMovements
+            var pagedEntities = filteredMovements
                 .Skip((request.Page - 1) * request.PageSize)
                 .Take(request.PageSize)
-                .Select(m => new InventoryMovementDto
-                {
-                    MovementId = m.MovementId,
-                    ProductId = m.ProductId,
-                    ProductName = m.Product.Name,
-                    Quantity = m.Quantity,
-                    Type = m.Type.ToString(),
-                    Reason = m.Reason,
-                    MovementDate = m.MovementDate,
-                    UserId = m.UserId,
-                    Username = m.User != null ? m.User.Username : "System"
-                })
                 .ToList();
+
+            var pagedMovements = pagedEntities.Select(m => new InventoryMovementDto
+            {
+                MovementId = m.MovementId,
+                ProductId = m.ProductId,
+                ProductName = m.Product != null && !string.IsNullOrEmpty(m.Product.Name) ? m.Product.Name : "(unknown)",
+                Quantity = m.Quantity,
+                Type = m.Type.ToString(),
+                Reason = m.Reason ?? string.Empty,
+                MovementDate = m.MovementDate,
+                UserId = m.UserId,
+                Username = m.User != null && !string.IsNullOrEmpty(m.User.Username) ? m.User.Username : "System"
+            }).ToList();
 
             var response = new PagedResponse<InventoryMovementDto>
             {
@@ -175,6 +181,7 @@ public class InventoryController : ControllerBase
                 return BadRequest("Adjustment would result in negative stock");
 
             // Create inventory movement record
+            var currentUserId = GetCurrentUserId();
             var movement = new InventoryMovement
             {
                 ProductId = request.ProductId,
@@ -182,7 +189,7 @@ public class InventoryController : ControllerBase
                 Type = request.QuantityChange > 0 ? MovementType.StockIn : MovementType.StockOut,
                 Reason = request.Reason,
                 MovementDate = DateTime.UtcNow,
-                UserId = GetCurrentUserId() // Helper method to get current user ID
+                UserId = currentUserId
             };
 
             // Update product stock
@@ -419,10 +426,11 @@ public class InventoryController : ControllerBase
         }
     }
 
-    private int GetCurrentUserId()
+    private int? GetCurrentUserId()
     {
         // TODO: Implement proper user ID extraction from JWT token
-        return 1; // Placeholder
+        // Return null when running as system/no authenticated user to avoid FK violations
+        return null; // Placeholder: no authenticated user in some background or script contexts
     }
 
     private string GetCurrentUsername()

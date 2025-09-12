@@ -179,6 +179,25 @@ public class StationsController : ControllerBase
     return Ok();
     }
 
+    [HttpPost("{id}/toggle-availability")]
+    [Authorize(Roles = "Admin,Manager")]
+    public async Task<IActionResult> ToggleAvailability(int id)
+    {
+        var success = await _stationService.ToggleAvailabilityAsync(id);
+        if (!success)
+            return NotFound();
+
+        // invalidate/update cache for this station and list
+        await _cacheService.RemoveAsync("stations:all");
+        await _cacheService.RemoveAsync($"station:snapshot:{id}");
+
+        var updated = await _stationService.GetStationByIdAsync(id);
+        if (updated != null)
+            await _hubContext.Clients.All.SendAsync("StationUpdated", MapToDto(updated));
+
+        return Ok();
+    }
+
     private static StationDto MapToDto(GameStation station)
     {
         return new StationDto

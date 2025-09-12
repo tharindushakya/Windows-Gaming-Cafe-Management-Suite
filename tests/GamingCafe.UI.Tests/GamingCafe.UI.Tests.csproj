@@ -6,7 +6,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\GamingCafe.Admin\GamingCafe.Admin.csproj" />
+  <!-- ProjectReference removed: src\GamingCafe.Admin is a non-.NET admin UI and not present as a csproj in the repo.
+     Test-only stubs are provided in the test project to satisfy compile-time references. -->
   </ItemGroup>
 
   <ItemGroup>
@@ -16,8 +17,12 @@
   <PackageReference Include="coverlet.collector" Version="3.2.0" />
   <PackageReference Include="coverlet.msbuild" Version="3.2.0" />
     <PackageReference Include="FluentAssertions" Version="6.8.0" />
-  <PackageReference Include="bunit" Version="2.7.0" />
-  <PackageReference Include="bunit.web" Version="2.7.0" />
+  <!-- Use bUnit web testing package (provides TestContext). Avoid duplicate bunit package to prevent type conflicts. -->
+  <PackageReference Include="bunit.web" Version="1.40.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Use the shared ASP.NET Core framework to provide HttpContext types for tests -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
 </Project>

@@ -126,6 +126,46 @@ public class UnitOfWork : IUnitOfWork
             ApplyAuditTrail();
         }
 
+        // Normalize all DateTime properties to UTC to ensure compatibility with timestamptz in Postgres/Npgsql
+        foreach (var entry in _context.ChangeTracker.Entries())
+        {
+            foreach (var prop in entry.Properties)
+            {
+                try
+                {
+                    if (prop.CurrentValue is DateTime dt)
+                    {
+                        DateTime utc = dt.Kind switch
+                        {
+                            DateTimeKind.Utc => dt,
+                            DateTimeKind.Local => dt.ToUniversalTime(),
+                            _ => DateTime.SpecifyKind(dt, DateTimeKind.Local).ToUniversalTime()
+                        };
+
+                        prop.CurrentValue = utc;
+                    }
+
+                    // Handle nullable DateTime (DateTime?)
+                    var propType = prop.Metadata.ClrType;
+                    if (propType == typeof(DateTime?) && prop.CurrentValue is DateTime ndt)
+                    {
+                        DateTime utc = ndt.Kind switch
+                        {
+                            DateTimeKind.Utc => ndt,
+                            DateTimeKind.Local => ndt.ToUniversalTime(),
+                            _ => DateTime.SpecifyKind(ndt, DateTimeKind.Local).ToUniversalTime()
+                        };
+
+                        prop.CurrentValue = utc;
+                    }
+                }
+                catch
+                {
+                    // Swallow conversion errors for non-DateTime properties and continue
+                }
+            }
+        }
+
         try
         {
             return await _context.SaveChangesAsync(cancellationToken);

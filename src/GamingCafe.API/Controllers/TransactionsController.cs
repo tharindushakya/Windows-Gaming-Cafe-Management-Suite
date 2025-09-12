@@ -5,6 +5,8 @@ using GamingCafe.Core.Models;
 using GamingCafe.Core.Interfaces;
 using GamingCafe.Data.Repositories;
 using System.ComponentModel.DataAnnotations;
+using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
 
 namespace GamingCafe.API.Controllers;
 
@@ -33,6 +35,7 @@ public class TransactionsController : ControllerBase
     {
         try
         {
+            // Get all transactions first
             var transactions = await _unitOfWork.Repository<Transaction>().GetAllAsync();
             var filteredTransactions = transactions.AsQueryable();
 
@@ -120,6 +123,7 @@ public class TransactionsController : ControllerBase
             var pagedTransactions = filteredTransactions
                 .Skip((request.Page - 1) * request.PageSize)
                 .Take(request.PageSize)
+                .ToList() // Convert to list first to enable null propagation
                 .Select(t => new TransactionDto
                 {
                     TransactionId = t.TransactionId,
@@ -135,8 +139,8 @@ public class TransactionsController : ControllerBase
                     CreatedAt = t.CreatedAt,
                     ProcessedAt = t.ProcessedAt,
                     Notes = t.Notes,
-                    Username = t.User.Username,
-                    ProductName = t.Product != null ? t.Product.Name : null
+                    Username = t.User?.Username ?? "Unknown",
+                    ProductName = t.Product?.Name ?? null
                 })
                 .ToList();
 

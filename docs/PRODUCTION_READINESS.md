@@ -46,7 +46,7 @@ A multi-project .NET 8 solution (API, Blazor Admin, WPF POS, Core, Data, Tests) 
 
 ```text
 +-----------------------------+        +--------------------------+
-|  Blazor Admin (Server)      |  -->   |  API (ASP.NET Core)      |
+|  React Admin (Server)      |  -->   |  API (ASP.NET Core)      |
 +-----------------------------+        |  Auth / Sessions / Jobs  |
                                         |  Domain Orchestration    |
 +-----------------------------+        +--------------------------+

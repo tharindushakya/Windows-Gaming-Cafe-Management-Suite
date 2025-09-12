@@ -92,10 +92,15 @@ public class GameSessionsController : ControllerBase
             };
 
             var totalCount = filteredSessions.Count();
-            var pagedSessions = filteredSessions
+            var pagedSessionsList = filteredSessions
                 .Skip((request.Page - 1) * request.PageSize)
                 .Take(request.PageSize)
-                .Select(s => new GameSessionDto
+                .ToList();
+
+            var pagedSessions = new List<GameSessionDto>();
+            foreach (var s in pagedSessionsList)
+            {
+                pagedSessions.Add(new GameSessionDto
                 {
                     SessionId = s.SessionId,
                     UserId = s.UserId,
@@ -107,10 +112,10 @@ public class GameSessionsController : ControllerBase
                     TotalCost = s.TotalCost,
                     Notes = s.Notes,
                     CreatedAt = s.CreatedAt,
-                    Username = s.User.Username,
-                    StationName = s.Station.StationName
-                })
-                .ToList();
+                    Username = s.User != null ? s.User.Username : "Unknown",
+                    StationName = s.Station != null ? s.Station.StationName : "Unknown"
+                });
+            }
 
             var response = new PagedResponse<GameSessionDto>
             {
@@ -142,6 +147,11 @@ public class GameSessionsController : ControllerBase
             if (session == null)
                 return NotFound();
 
+            // Load related user and station defensively to avoid NullReferenceException when navigation
+            // properties are not loaded by EF or when the relationships are missing.
+            var user = await _unitOfWork.Repository<User>().GetByIdAsync(session.UserId);
+            var station = await _unitOfWork.Repository<GameStation>().GetByIdAsync(session.StationId);
+
             var sessionDto = new GameSessionDto
             {
                 SessionId = session.SessionId,
@@ -154,8 +164,8 @@ public class GameSessionsController : ControllerBase
                 TotalCost = session.TotalCost,
                 Notes = session.Notes,
                 CreatedAt = session.CreatedAt,
-                Username = session.User.Username,
-                StationName = session.Station.StationName
+                Username = user?.Username ?? "Unknown",
+                StationName = station?.StationName ?? "Unknown"
             };
 
             return Ok(sessionDto);
@@ -216,7 +226,8 @@ public class GameSessionsController : ControllerBase
                 StationId = request.StationId,
                 StartTime = DateTime.UtcNow,
                 Status = SessionStatus.Active,
-                Notes = request.Notes!,
+                Notes = request.Notes ?? string.Empty,
+                HourlyRate = station.HourlyRate,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -225,7 +236,16 @@ public class GameSessionsController : ControllerBase
 
             await _unitOfWork.Repository<GameSession>().AddAsync(session);
             _unitOfWork.Repository<GameStation>().Update(station);
-            await _unitOfWork.SaveChangesAsync();
+            try
+            {
+                _logger.LogInformation("Saving new session for UserId={UserId}, StationId={StationId}", request.UserId, request.StationId);
+                await _unitOfWork.SaveChangesAsync();
+            }
+            catch (Exception saveEx)
+            {
+                _logger.LogError(saveEx, "Failed to save new session for UserId={UserId}, StationId={StationId}", request.UserId, request.StationId);
+                throw;
+            }
 
             var sessionDto = new GameSessionDto
             {
@@ -453,9 +473,16 @@ public class GameSessionsController : ControllerBase
         try
         {
             var allSessions = await _unitOfWork.Repository<GameSession>().GetAllAsync();
-            var activeSessions = allSessions
-                .Where(s => s.Status == SessionStatus.Active)
-                .Select(s => new GameSessionDto
+            var activeList = allSessions.Where(s => s.Status == SessionStatus.Active).ToList();
+            var activeSessions = new List<GameSessionDto>(activeList.Count);
+            // Load related user and station per session to avoid any null navigation issues
+            foreach (var s in activeList)
+            {
+                // Attempt to fetch related entities defensively
+                var user = await _unitOfWork.Repository<User>().GetByIdAsync(s.UserId);
+                var station = await _unitOfWork.Repository<GameStation>().GetByIdAsync(s.StationId);
+
+                activeSessions.Add(new GameSessionDto
                 {
                     SessionId = s.SessionId,
                     UserId = s.UserId,
@@ -467,10 +494,10 @@ public class GameSessionsController : ControllerBase
                     TotalCost = s.TotalCost,
                     Notes = s.Notes,
                     CreatedAt = s.CreatedAt,
-                    Username = s.User.Username,
-                    StationName = s.Station.StationName
-                })
-                .ToList();
+                    Username = user?.Username ?? "Unknown",
+                    StationName = station?.StationName ?? "Unknown"
+                });
+            }
 
             return Ok(activeSessions);
         }
@@ -490,32 +517,35 @@ public class GameSessionsController : ControllerBase
         try
         {
             var allSessions = await _unitOfWork.Repository<GameSession>().GetAllAsync();
-            var userSessions = allSessions
-                .Where(s => s.UserId == userId)
-                .AsQueryable();
+            var userSessionsList = allSessions.Where(s => s.UserId == userId).ToList();
 
             if (request.Status.HasValue)
             {
-                userSessions = userSessions.Where(s => s.Status == request.Status.Value);
+                userSessionsList = userSessionsList.Where(s => s.Status == request.Status.Value).ToList();
             }
 
             if (request.StartDate.HasValue)
             {
-                userSessions = userSessions.Where(s => s.StartTime >= request.StartDate.Value);
+                userSessionsList = userSessionsList.Where(s => s.StartTime >= request.StartDate.Value).ToList();
             }
 
             if (request.EndDate.HasValue)
             {
-                userSessions = userSessions.Where(s => s.StartTime <= request.EndDate.Value);
+                userSessionsList = userSessionsList.Where(s => s.StartTime <= request.EndDate.Value).ToList();
             }
 
-            userSessions = userSessions.OrderByDescending(s => s.StartTime);
+            userSessionsList = userSessionsList.OrderByDescending(s => s.StartTime).ToList();
 
-            var totalCount = userSessions.Count();
-            var pagedSessions = userSessions
+            var totalCount = userSessionsList.Count;
+            var paged = userSessionsList
                 .Skip((request.Page - 1) * request.PageSize)
                 .Take(request.PageSize)
-                .Select(s => new GameSessionDto
+                .ToList();
+
+            var pagedDtos = new List<GameSessionDto>(paged.Count);
+            foreach (var s in paged)
+            {
+                pagedDtos.Add(new GameSessionDto
                 {
                     SessionId = s.SessionId,
                     UserId = s.UserId,
@@ -527,14 +557,14 @@ public class GameSessionsController : ControllerBase
                     TotalCost = s.TotalCost,
                     Notes = s.Notes,
                     CreatedAt = s.CreatedAt,
-                    Username = s.User.Username,
-                    StationName = s.Station.StationName
-                })
-                .ToList();
+                    Username = s.User != null ? s.User.Username : "Unknown",
+                    StationName = s.Station != null ? s.Station.StationName : "Unknown"
+                });
+            }
 
             var response = new PagedResponse<GameSessionDto>
             {
-                Data = pagedSessions,
+                Data = pagedDtos,
                 Page = request.Page,
                 PageSize = request.PageSize,
                 TotalCount = totalCount,
