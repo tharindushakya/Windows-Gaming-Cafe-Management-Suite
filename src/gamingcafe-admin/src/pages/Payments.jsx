@@ -388,14 +388,16 @@ export default function Payments() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Filter Transactions</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-            <input
-              type="text"
-              name="search"
-              placeholder="Search transactions..."
-              value={filters.search}
-              onChange={handleFilterChange}
-              className="px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-            />
+            <div>
+              <input
+                type="text"
+                name="search"
+                placeholder="Search transactions..."
+                value={filters.search}
+                onChange={handleFilterChange}
+                className="px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+              />
+            </div>
             <select
               name="type"
               value={filters.type}

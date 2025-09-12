@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+// FilterSearch removed - using native inputs
 import api from '../api';
 import { useToast } from '../components/ToastProvider';
 import SimpleModal from '../components/SimpleModal';

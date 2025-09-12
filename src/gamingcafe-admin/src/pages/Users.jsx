@@ -15,15 +15,16 @@ export default function Users() {
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [confirm, setConfirm] = useState(null);
-  const [search, setSearch] = useState('');
-  const searchRef = useRef(null);
+  const [filters, setFilters] = useState({ search: '' });
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const searchTimeoutRef = useRef(null);
   const toast = useToast();
 
   const fetchUsers = useCallback(async (p = 1, q = '') => {
     setLoading(true);
     setError(null);
     try {
-      const qs = `?page=${p}&pageSize=${pageSize}` + (q ? `&search=${encodeURIComponent(q)}` : '');
+      const qs = `?page=${p}&pageSize=${pageSize}` + (q ? `&searchTerm=${encodeURIComponent(q)}` : '');
       const res = await api.get(`/api/v1.0/users${qs}`);
       const list = res?.data ?? res ?? [];
       setUsers(list);
@@ -36,22 +37,20 @@ export default function Users() {
   }, [pageSize]);
 
   useEffect(() => { 
-    // Only fetch on page change, not on search change
-    if (search === '') {
-      fetchUsers(page, search); 
-    }
+    // Load users when page or debouncedSearch change
+    fetchUsers(page, debouncedSearch);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchUsers, page]);
+  }, [fetchUsers, page, debouncedSearch]);
 
-  // debounced search - separate from page effect
+  // Debounce filters.search into debouncedSearch
   useEffect(() => {
-    if (searchRef.current) clearTimeout(searchRef.current);
-    searchRef.current = setTimeout(() => { 
-      setPage(1); 
-      fetchUsers(1, search); 
-    }, 500); // Increased timeout to reduce API calls
-    return () => { if (searchRef.current) clearTimeout(searchRef.current); };
-  }, [search, fetchUsers]);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => {
+      setDebouncedSearch(filters.search || '');
+      setPage(1); // Reset to page 1 when searching
+    }, 500);
+    return () => { if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current); };
+  }, [filters.search]);
 
   function openCreate() { setEditingUser(null); setShowModal(true); }
   function openEdit(u) { setEditingUser(u); setShowModal(true); }
@@ -67,7 +66,7 @@ export default function Users() {
         toast?.push('User created', 'success');
       }
       setShowModal(false);
-      fetchUsers(page, search);
+      fetchUsers(page, filters.search ?? debouncedSearch ?? '');
     } catch (err) {
       toast?.push(err?.data?.message || err.message || 'Failed to save user', 'error');
       throw err;
@@ -82,7 +81,7 @@ export default function Users() {
       await api.del(`/api/v1.0/users/${id}`);
       setConfirm(null);
       toast?.push('User deleted', 'success');
-      fetchUsers(page, search);
+      fetchUsers(page, filters.search ?? debouncedSearch ?? '');
     } catch (err) {
       toast?.push(err?.data?.message || err.message || 'Failed to delete user', 'error');
     }
@@ -116,19 +115,19 @@ export default function Users() {
         {/* Search & Filters */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-            <div className="relative flex-1">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+              <div className="relative flex-1">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <input
+                  value={filters.search}
+                  onChange={e => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                  placeholder="Search by username or email..."
+                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                />
               </div>
-              <input 
-                value={search} 
-                onChange={e => setSearch(e.target.value)} 
-                placeholder="Search by username or email..." 
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-              />
-            </div>
           </div>
         </div>
 

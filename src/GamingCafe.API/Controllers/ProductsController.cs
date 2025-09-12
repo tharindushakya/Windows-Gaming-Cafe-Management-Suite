@@ -33,8 +33,8 @@ public class ProductsController : ControllerBase
     {
         try
         {
-            // try cache first
-            var cacheKey = "products:all"; // simple key for default paged view; advanced: include query hash
+            // Create cache key that includes search parameters
+            var cacheKey = $"products:page_{request.Page}_size_{request.PageSize}_search_{request.Search ?? "none"}_category_{request.Category ?? "none"}_active_{request.IsActive?.ToString() ?? "none"}_minprice_{request.MinPrice?.ToString() ?? "none"}_maxprice_{request.MaxPrice?.ToString() ?? "none"}_instock_{request.InStock?.ToString() ?? "none"}_sortby_{request.SortBy ?? "none"}_desc_{request.SortDescending}";
             var cached = await _cacheService.GetAsync<PagedResponse<ProductDto>>(cacheKey);
             if (cached != null)
             {
@@ -128,7 +128,7 @@ public class ProductsController : ControllerBase
                 TotalPages = (int)Math.Ceiling((double)totalCount / request.PageSize)
             };
 
-            // cache the default list for 5 minutes
+            // Cache the response with the specific query parameters for 5 minutes
             await _cacheService.SetAsync(cacheKey, response, TimeSpan.FromMinutes(5));
 
             return Ok(response);

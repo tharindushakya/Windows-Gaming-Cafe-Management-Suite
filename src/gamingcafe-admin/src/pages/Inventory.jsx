@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+// FilterSearch removed — use native inputs
 import api from '../api';
 import { useToast } from '../components/ToastProvider';
 import ProductForm from '../components/ProductForm';
@@ -38,6 +39,7 @@ export default function Inventory() {
   // bulk adjust
   const [showBulkAdjust, setShowBulkAdjust] = useState(false);
   const [bulkText, setBulkText] = useState('productId,quantityChange,reason\n');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
   const [error, setError] = useState(null);
   const toast = useToast();
@@ -47,7 +49,8 @@ export default function Inventory() {
     setLoading(true);
     setError(null);
     try {
-      const q = `?page=${opts.page ?? page}&pageSize=${opts.pageSize ?? pageSize}` + (search ? `&search=${encodeURIComponent(search)}` : '');
+      const searchTerm = opts.search !== undefined ? opts.search : debouncedSearch;
+      const q = `?page=${opts.page ?? page}&pageSize=${opts.pageSize ?? pageSize}` + (searchTerm ? `&search=${encodeURIComponent(searchTerm)}` : '');
       const resp = await api.get(`/api/v1.0/products${q}`);
       if (resp && resp.data) {
         setProducts(resp.data);
@@ -62,7 +65,7 @@ export default function Inventory() {
     } catch (err) {
       setError(err?.message || 'Failed to load products');
     } finally { setLoading(false); }
-  }, [page, pageSize, search]);
+  }, [page, pageSize, debouncedSearch]);
 
   const fetchLowStock = async () => {
     try {
@@ -86,12 +89,11 @@ export default function Inventory() {
   };
 
   useEffect(() => { 
-    // Only fetch on initial load and page changes when search is empty
-    if (search === '') {
-      fetchProducts(); 
-    }
+    // Load products when page or debouncedSearch change
+    fetchProducts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchProducts]);
+  }, [fetchProducts, page, debouncedSearch]);
+  
   useEffect(() => { fetchLowStock(); fetchMovements(); }, []);
 
   // Debounced search
@@ -99,11 +101,11 @@ export default function Inventory() {
   useEffect(() => {
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     searchTimeoutRef.current = setTimeout(() => {
-      setPage(1);
-      fetchProducts({ page: 1 });
-    }, 500); // Increased timeout to reduce API calls
+      setDebouncedSearch(search || '');
+      setPage(1); // Reset to page 1 when searching
+    }, 500);
     return () => { if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current); };
-  }, [search, fetchProducts]);
+  }, [search]);
 
   // create or update product
   async function saveProduct(data) {
@@ -245,21 +247,15 @@ export default function Inventory() {
           {/* Search and Actions Bar */}
           <div className="bg-white rounded-lg shadow p-4">
             <div className="flex flex-col sm:flex-row gap-3">
-              <div className="flex-1">
-                <input 
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500" 
-                  placeholder="Search products..." 
-                  value={search} 
-                  onChange={e => setSearch(e.target.value)} 
-                />
-              </div>
-              <div className="flex gap-2">
-                <button 
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors duration-200" 
-                  onClick={() => { setPage(1); fetchProducts({ page: 1 }); }}
-                >
-                  Search
-                </button>
+                <div className="flex-1">
+                  <input 
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500" 
+                    placeholder="Search products..." 
+                    value={search} 
+                    onChange={e => { setSearch(e.target.value); }} 
+                  />
+                </div>
+                <div className="flex gap-2">
                 <button 
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors duration-200" 
                   onClick={() => { setEditingProduct(null); setShowProductModal(true); }}
@@ -299,6 +295,9 @@ export default function Inventory() {
                 loading={loading}
                 onPageChange={(p) => { setPage(p); fetchProducts({ page: p }); }}
                 tableHeaders={['ID', 'Name', 'Category', 'Price', 'Stock', 'Min Level', 'Updated', 'Status']}
+                emptyTitle={search ? `No products found for "${search}"` : "No products found"}
+                emptySubtitle={search ? "Try adjusting your search or add new products" : "Add your first product to get started"}
+                emptyIcon="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M9 1v6m6-6v6"
                 renderRow={(p) => (
                   <tr className="hover:bg-gray-50" key={p.productId}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">

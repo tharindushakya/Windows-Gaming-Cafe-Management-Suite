@@ -123,6 +123,8 @@ export default function TransactionsPage() {
             totalCount={totalCount} 
             onPageChange={setPage} 
             loading={loading}
+            emptyTitle="No transactions found"
+            emptySubtitle="Create your first transaction to get started"
             renderRow={t => (
               <tr className="hover:bg-gray-50 transition-colors duration-200">
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
