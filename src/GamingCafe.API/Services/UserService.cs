@@ -57,52 +57,55 @@ namespace GamingCafe.API.Services
         /// Simple mapping from role -> permissions. Admin gets everything.
         /// Manager and Staff get a subset.
         /// </summary>
-        public Task<bool> HasPermissionAsync(int userId, string permission)
+        public async Task<bool> HasPermissionAsync(int userId, string permission)
         {
             // In-memory mapping for demo purposes
-            var role = _db.Users.Where(u => u.UserId == userId).Select(u => u.Role.ToString()).FirstOrDefault();
-            if (string.IsNullOrEmpty(role)) return Task.FromResult(false);
+            var role = await _db.Users
+                .Where(u => u.UserId == userId)
+                .Select(u => u.Role.ToString())
+                .FirstOrDefaultAsync();
+            if (string.IsNullOrEmpty(role)) return false;
 
             if (role == GamingCafe.Core.Authorization.RoleNames.Admin)
-                return Task.FromResult(true);
+                return true;
 
             if (role == GamingCafe.Core.Authorization.RoleNames.Manager)
             {
                 // Manager can view financials but not issue refunds by default
                 if (permission == "inv:write" || permission == "view:financials")
-                    return Task.FromResult(true);
-                return Task.FromResult(false);
+                    return true;
+                return false;
             }
 
             if (role == GamingCafe.Core.Authorization.RoleNames.Staff)
             {
                 if (permission == "inv:write")
-                    return Task.FromResult(true);
-                return Task.FromResult(false);
+                    return true;
+                return false;
             }
 
-            return Task.FromResult(false);
+            return false;
         }
 
-        public Task<IEnumerable<string>> GetPermissionsAsync(int userId)
+        public async Task<IEnumerable<string>> GetPermissionsAsync(int userId)
         {
-            var role = _db.Users.Where(u => u.UserId == userId).Select(u => u.Role.ToString()).FirstOrDefault();
-            if (string.IsNullOrEmpty(role)) return Task.FromResult(Enumerable.Empty<string>());
+            var role = await _db.Users
+                .Where(u => u.UserId == userId)
+                .Select(u => u.Role.ToString())
+                .FirstOrDefaultAsync();
+
+            if (string.IsNullOrEmpty(role)) return Enumerable.Empty<string>();
 
             if (role == GamingCafe.Core.Authorization.RoleNames.Admin)
-                return Task.FromResult((IEnumerable<string>)new[] { "*" }); // wildcard meaning all permissions
+                return new[] { "*" };
 
             if (role == GamingCafe.Core.Authorization.RoleNames.Manager)
-            {
-                return Task.FromResult((IEnumerable<string>)new[] { "inv:write", "view:financials" });
-            }
+                return new[] { "inv:write", "view:financials" };
 
             if (role == GamingCafe.Core.Authorization.RoleNames.Staff)
-            {
-                return Task.FromResult((IEnumerable<string>)new[] { "inv:write" });
-            }
+                return new[] { "inv:write" };
 
-            return Task.FromResult(Enumerable.Empty<string>());
+            return Enumerable.Empty<string>();
         }
 
         // Wallet / other methods not implemented in this minimal service
