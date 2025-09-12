@@ -67,212 +67,307 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="dc-dashboard">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '200px' }}>
-          <div style={{ color: 'var(--text-secondary)' }}>Loading dashboard...</div>
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+            <div className="text-gray-500 text-lg">Loading dashboard...</div>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="dc-dashboard">
-      <div className="dc-welcome">
-        <div>
-          <h1>Dashboard</h1>
-          <p className="dc-subtitle">Real-time overview of your gaming café</p>
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
+            <p className="text-gray-600">Real-time overview of your gaming café</p>
+          </div>
+          <div className="mt-4 sm:mt-0">
+            <button 
+              className="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors duration-200 gap-2"
+              onClick={() => { setSelectedSession(null); setShowSessionModal(true); }}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              New Session
+            </button>
+          </div>
         </div>
-        <div>
-          <button className="btn btn-primary" onClick={() => { setSelectedSession(null); setShowSessionModal(true); }}>
-            <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-              <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
-              <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
-            </svg>
-            New Session
-          </button>
-        </div>
-      </div>
 
-      {/* Stats Cards */}
-      <div className="dc-stats">
-        <div className="dc-card">
-          <div className="dc-card-title">Active Stations</div>
-          <div className="dc-card-value">{stats.activeStations}/16</div>
-          <div className="dc-card-change positive">+2 from yesterday</div>
-        </div>
-        
-        <div className="dc-card">
-          <div className="dc-card-title">Today's Revenue</div>
-          <div className="dc-card-value">${stats.totalRevenue.toFixed(2)}</div>
-          <div className="dc-card-change positive">+15.3% from yesterday</div>
-        </div>
-        
-        <div className="dc-card">
-          <div className="dc-card-title">Online Users</div>
-          <div className="dc-card-value">{stats.onlineUsers}</div>
-          <div className="dc-card-change positive">+3 in last hour</div>
-        </div>
-        
-        <div className="dc-card">
-          <div className="dc-card-title">Occupancy Rate</div>
-          <div className="dc-card-value">{stats.occupancyRate}%</div>
-          <div className="dc-card-change positive">Peak hours</div>
-        </div>
-      </div>
-
-      {/* Active Sessions and Alerts */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px', marginTop: '24px' }}>
-        {/* Active Sessions */}
-        <div className="dc-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '18px', fontWeight: 600 }}>Active Sessions</h3>
-            <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '6px 12px' }}>View All</button>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Active Stations</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{stats.activeStations}<span className="text-lg text-gray-500">/16</span></p>
+                <p className="text-sm text-emerald-600 mt-1 flex items-center">
+                  <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                  </svg>
+                  +2 from yesterday
+                </p>
+              </div>
+              <div className="p-3 bg-indigo-100 rounded-lg">
+                <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </div>
+            </div>
           </div>
           
-          <div className="data-table">
-            <table style={{ width: '100%' }}>
-              <thead>
-                <tr>
-                  <th>Station</th>
-                  <th>User</th>
-                  <th>Game</th>
-                  <th>Duration</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activeSessions.map(session => (
-                  <tr key={session.id}>
-                    <td>
-                      <span className="status-indicator status-online">
-                        {session.station}
-                      </span>
-                    </td>
-                    <td style={{ fontWeight: 500 }}>{session.user}</td>
-                    <td style={{ color: 'var(--text-secondary)' }}>{session.game}</td>
-                    <td style={{ fontFamily: 'JetBrains Mono, monospace' }}>{session.timeElapsed}</td>
-                    <td>
-                      <button className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 8px' }} onClick={() => { setSelectedSession(session); setShowSessionModal(true); }}>
-                        Manage
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Today's Revenue</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">${stats.totalRevenue.toFixed(2)}</p>
+                <p className="text-sm text-emerald-600 mt-1 flex items-center">
+                  <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                  </svg>
+                  +15.3% from yesterday
+                </p>
+              </div>
+              <div className="p-3 bg-emerald-100 rounded-lg">
+                <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Online Users</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{stats.onlineUsers}</p>
+                <p className="text-sm text-emerald-600 mt-1 flex items-center">
+                  <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                  </svg>
+                  +3 in last hour
+                </p>
+              </div>
+              <div className="p-3 bg-blue-100 rounded-lg">
+                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Occupancy Rate</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{stats.occupancyRate}%</p>
+                <p className="text-sm text-amber-600 mt-1 flex items-center">
+                  <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                  </svg>
+                  Peak hours
+                </p>
+              </div>
+              <div className="p-3 bg-amber-100 rounded-lg">
+                <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Session modal (create or manage) */}
-        {showSessionModal && (
-          <SimpleModal title={selectedSession ? `Manage ${selectedSession.station}` : 'Create session'} onClose={() => { setShowSessionModal(false); setSelectedSession(null); }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {selectedSession ? (
-                <div>
-                  <div><strong>Station:</strong> {selectedSession.station}</div>
-                  <div><strong>User:</strong> {selectedSession.user}</div>
-                  <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-                    <button className="btn" onClick={() => { setConfirmAction({ type: 'pause', label: 'Pause session', session: selectedSession }); setShowConfirm(true); }}>Pause</button>
-                    <button className="btn" onClick={() => { setConfirmAction({ type: 'resume', label: 'Resume session', session: selectedSession }); setShowConfirm(true); }}>Resume</button>
-                    <button className="btn btn-danger" onClick={() => { setConfirmAction({ type: 'end', label: 'End session', session: selectedSession }); setShowConfirm(true); }}>End</button>
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          {/* Active Sessions */}
+          <div className="xl:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Active Sessions</h3>
+              <button className="text-sm text-indigo-600 hover:text-indigo-700 font-medium">
+                View All
+              </button>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Station</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Game</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {activeSessions.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                        <div className="flex flex-col items-center">
+                          <svg className="w-12 h-12 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                          <p className="text-lg font-medium text-gray-900 mb-1">No active sessions</p>
+                          <p className="text-gray-500">Start a new session to see it here</p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    activeSessions.map(session => (
+                      <tr key={session.id} className="hover:bg-gray-50 transition-colors duration-200">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 w-2 h-2 bg-emerald-400 rounded-full mr-3"></div>
+                            <span className="text-sm font-medium text-gray-900">{session.station}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{session.user}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{session.game}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">{session.timeElapsed}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <button 
+                            className="text-indigo-600 hover:text-indigo-700 font-medium"
+                            onClick={() => { setSelectedSession(session); setShowSessionModal(true); }}
+                          >
+                            Manage
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* System Alerts */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">System Alerts</h3>
+            </div>
+            
+            <div className="p-6">
+              <div className="space-y-4">
+                {systemAlerts.length === 0 ? (
+                  <div className="text-center py-8">
+                    <svg className="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5-5-5h5v-12a3 3 0 015.196-2.196l.707-.707A1 1 0 0117.071.929l-.707.707A5 5 0 009 7v10z" />
+                    </svg>
+                    <p className="text-gray-500">All systems running smoothly</p>
+                  </div>
+                ) : (
+                  systemAlerts.map(alert => (
+                    <div key={alert.id} className={`p-4 rounded-lg border-l-4 ${
+                      alert.type === 'warning' ? 'bg-amber-50 border-amber-400' : 
+                      alert.type === 'success' ? 'bg-emerald-50 border-emerald-400' : 
+                      'bg-blue-50 border-blue-400'
+                    }`}>
+                      <div className="flex items-start">
+                        <div className={`flex-shrink-0 w-5 h-5 rounded-full mt-0.5 mr-3 ${
+                          alert.type === 'warning' ? 'bg-amber-400' : 
+                          alert.type === 'success' ? 'bg-emerald-400' : 
+                          'bg-blue-400'
+                        }`}></div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-900">{alert.message}</p>
+                          <p className="text-xs text-gray-500 mt-1">{alert.time}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              
+              <button 
+                className="w-full mt-6 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-300 rounded-lg transition-colors duration-200"
+                onClick={() => toast.push('Opening alerts panel (mock)', 'info')}
+              >
+                View All Alerts
+              </button>
+            </div>
+        </div>
+      </div>
+
+      {/* Session Modal (create or manage) */}
+      {showSessionModal && (
+        <SimpleModal 
+          title={selectedSession ? `Manage ${selectedSession.station}` : 'Create Session'} 
+          onClose={() => { setShowSessionModal(false); setSelectedSession(null); }}
+        >
+          <div className="p-6">
+            {selectedSession ? (
+              <div className="space-y-4">
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-500">Station:</span>
+                      <div className="text-gray-900 font-medium">{selectedSession.station}</div>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-500">User:</span>
+                      <div className="text-gray-900 font-medium">{selectedSession.user}</div>
+                    </div>
                   </div>
                 </div>
-              ) : (
-                <CreateSessionForm onStarted={() => { setShowSessionModal(false); loadDashboardData(); toast.push('Session started', 'success'); }} />
-              )}
-            </div>
-          </SimpleModal>
-        )}
-
-        {/* Confirm modal for destructive actions */}
-        {showConfirm && confirmAction && (
-          <SimpleModal title={confirmAction.label} onClose={() => { setShowConfirm(false); setConfirmAction(null); }}>
-            <ConfirmDialog
-              message={`Are you sure you want to ${confirmAction.label.toLowerCase()} for ${confirmAction.session.station}?`}
-              onCancel={() => { setShowConfirm(false); setConfirmAction(null); }}
-              onConfirm={async () => {
-                try {
-                  const id = confirmAction.session.id;
-                  if (confirmAction.type === 'pause') await api.post(`/api/v1.0/gamesessions/${id}/pause`);
-                  if (confirmAction.type === 'resume') await api.post(`/api/v1.0/gamesessions/${id}/resume`);
-                  if (confirmAction.type === 'end') await api.post(`/api/v1.0/gamesessions/${id}/end`);
-                  toast.push(`${confirmAction.label} successful`, 'success');
-                  setShowConfirm(false);
-                  setConfirmAction(null);
-                  setShowSessionModal(false);
-                  setSelectedSession(null);
-                  await loadDashboardData();
-                } catch (err) {
-                  toast.push(err.message || `${confirmAction.label} failed`, 'error');
-                }
-              }}
-            />
-          </SimpleModal>
-        )}
-
-        {/* System Alerts */}
-        <div className="dc-card">
-          <h3 style={{ margin: '0 0 20px 0', color: 'var(--text-primary)', fontSize: '18px', fontWeight: 600 }}>System Alerts</h3>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {systemAlerts.map(alert => (
-              <div key={alert.id} style={{
-                padding: '12px',
-                borderRadius: '8px',
-                background: 'var(--bg-elevated)',
-                border: `1px solid ${
-                  alert.type === 'warning' ? 'var(--accent-amber)' : 
-                  alert.type === 'success' ? 'var(--accent-green)' : 
-                  'var(--accent-blue)'
-                }`
-              }}>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'flex-start', 
-                  gap: '8px',
-                  marginBottom: '4px'
-                }}>
-                  <div style={{
-                    width: '6px',
-                    height: '6px',
-                    borderRadius: '50%',
-                    background: alert.type === 'warning' ? 'var(--accent-amber)' : 
-                               alert.type === 'success' ? 'var(--accent-green)' : 
-                               'var(--accent-blue)',
-                    marginTop: '6px',
-                    flexShrink: 0
-                  }}></div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ 
-                      color: 'var(--text-primary)', 
-                      fontSize: '14px',
-                      fontWeight: 500,
-                      lineHeight: 1.4
-                    }}>
-                      {alert.message}
-                    </div>
-                    <div style={{ 
-                      color: 'var(--text-muted)', 
-                      fontSize: '12px',
-                      marginTop: '2px'
-                    }}>
-                      {alert.time}
-                    </div>
-                  </div>
+                <div className="flex gap-3">
+                  <button 
+                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors duration-200"
+                    onClick={() => { setConfirmAction({ type: 'pause', label: 'Pause session', session: selectedSession }); setShowConfirm(true); }}
+                  >
+                    Pause
+                  </button>
+                  <button 
+                    className="px-4 py-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 text-sm font-medium rounded-lg transition-colors duration-200"
+                    onClick={() => { setConfirmAction({ type: 'resume', label: 'Resume session', session: selectedSession }); setShowConfirm(true); }}
+                  >
+                    Resume
+                  </button>
+                  <button 
+                    className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 text-sm font-medium rounded-lg transition-colors duration-200"
+                    onClick={() => { setConfirmAction({ type: 'end', label: 'End session', session: selectedSession }); setShowConfirm(true); }}
+                  >
+                    End Session
+                  </button>
                 </div>
               </div>
-            ))}
+            ) : (
+              <CreateSessionForm onStarted={() => { setShowSessionModal(false); loadDashboardData(); toast.push('Session started', 'success'); }} />
+            )}
           </div>
-          
-          <button className="btn btn-secondary" style={{ 
-            width: '100%', 
-            marginTop: '16px',
-            fontSize: '12px',
-            padding: '8px'
-          }} onClick={() => toast.push('Opening alerts panel (mock)', 'info')}>
-            View All Alerts
-          </button>
-        </div>
+        </SimpleModal>
+      )}
+
+      {/* Confirm Modal for destructive actions */}
+      {showConfirm && confirmAction && (
+        <SimpleModal title={confirmAction.label} onClose={() => { setShowConfirm(false); setConfirmAction(null); }}>
+          <ConfirmDialog
+            message={`Are you sure you want to ${confirmAction.label.toLowerCase()} for ${confirmAction.session.station}?`}
+            onCancel={() => { setShowConfirm(false); setConfirmAction(null); }}
+            onConfirm={async () => {
+              try {
+                const id = confirmAction.session.id;
+                if (confirmAction.type === 'pause') await api.post(`/api/v1.0/gamesessions/${id}/pause`);
+                if (confirmAction.type === 'resume') await api.post(`/api/v1.0/gamesessions/${id}/resume`);
+                if (confirmAction.type === 'end') await api.post(`/api/v1.0/gamesessions/${id}/end`);
+                toast.push(`${confirmAction.label} successful`, 'success');
+                setShowConfirm(false);
+                setConfirmAction(null);
+                setShowSessionModal(false);
+                setSelectedSession(null);
+                await loadDashboardData();
+              } catch (err) {
+                toast.push(err.message || `${confirmAction.label} failed`, 'error');
+              }
+            }}
+          />
+        </SimpleModal>
+      )}
       </div>
     </div>
   );
@@ -342,33 +437,58 @@ function CreateSessionForm({ onStarted }) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <label>Station</label>
-      <select value={stationId} onChange={e => setStationId(e.target.value)} disabled={loadingChoices}>
-        <option value="">-- select station --</option>
-        {stations.map(s => {
-          // id field may vary: stationId, id, StationId
-          const id = s?.stationId ?? s?.id ?? s?.StationId ?? s?.stationID ?? s?.stationId;
-          const name = s?.stationName ?? s?.name ?? s?.station_name ?? s?.station ?? s?.displayName;
-          const label = name || (id ? `Station ${id}` : 'Unnamed station');
-          return <option key={id ?? label} value={id ?? ''}>{label}</option>;
-        })}
-      </select>
+    <div className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Station</label>
+        <select 
+          value={stationId} 
+          onChange={e => setStationId(e.target.value)} 
+          disabled={loadingChoices}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+        >
+          <option value="">-- select station --</option>
+          {stations.map(s => {
+            // id field may vary: stationId, id, StationId
+            const id = s?.stationId ?? s?.id ?? s?.StationId ?? s?.stationID ?? s?.stationId;
+            const name = s?.stationName ?? s?.name ?? s?.station_name ?? s?.station ?? s?.displayName;
+            const label = name || (id ? `Station ${id}` : 'Unnamed station');
+            return <option key={id ?? label} value={id ?? ''}>{label}</option>;
+          })}
+        </select>
+      </div>
 
-      <label>User</label>
-      <select value={userId} onChange={e => setUserId(e.target.value)} disabled={loadingChoices}>
-        <option value="">-- select user --</option>
-        {users.map(u => {
-          const id = u?.userId ?? u?.id ?? u?.UserId ?? u?.userID ?? u?.userId;
-          const name = u?.username ?? u?.userName ?? u?.name ?? u?.displayName ?? u?.email;
-          const label = name || (id ? `User ${id}` : 'Unknown user');
-          return <option key={id ?? label} value={id ?? ''}>{label}</option>;
-        })}
-      </select>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">User</label>
+        <select 
+          value={userId} 
+          onChange={e => setUserId(e.target.value)} 
+          disabled={loadingChoices}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+        >
+          <option value="">-- select user --</option>
+          {users.map(u => {
+            const id = u?.userId ?? u?.id ?? u?.UserId ?? u?.userID ?? u?.userId;
+            const name = u?.username ?? u?.userName ?? u?.name ?? u?.displayName ?? u?.email;
+            const label = name || (id ? `User ${id}` : 'Unknown user');
+            return <option key={id ?? label} value={id ?? ''}>{label}</option>;
+          })}
+        </select>
+      </div>
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        <button className="btn" onClick={start} disabled={loadingChoices}>Start</button>
-        <button className="btn" onClick={() => { setStationId(''); setUserId(''); }}>Clear</button>
+      <div className="flex gap-3 pt-4">
+        <button 
+          className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={start} 
+          disabled={loadingChoices || !stationId || !userId}
+        >
+          {loadingChoices ? 'Loading...' : 'Start Session'}
+        </button>
+        <button 
+          className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors duration-200"
+          onClick={() => { setStationId(''); setUserId(''); }}
+        >
+          Clear
+        </button>
       </div>
     </div>
   );

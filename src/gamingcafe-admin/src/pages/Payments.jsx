@@ -305,69 +305,117 @@ export default function Payments() {
   const totalPages = Math.ceil(totalCount / pageSize);
 
   return (
-    <div className="p-5">
-      <div className="mb-6">
-        <h1 className="mb-2 text-3xl font-bold">Payments & Transactions</h1>
-        <p className="m-0 text-gray-500">Manage payment transactions, process refunds, and view financial data.</p>
-      </div>
-
-      {/* Statistics Cards */}
-      {stats && (
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4 mb-6">
-          <div className="bg-white p-5 rounded-lg shadow-sm">
-            <div className="text-sm text-gray-500 mb-1">Total Transactions</div>
-            <div className="text-2xl font-bold text-gray-900">{stats.totalTransactions}</div>
-          </div>
-          <div className="bg-white p-5 rounded-lg shadow-sm">
-            <div className="text-sm text-gray-500 mb-1">Total Revenue</div>
-            <div className="text-2xl font-bold text-emerald-600">{fmtAmount(stats.totalRevenue)}</div>
-          </div>
-          <div className="bg-white p-5 rounded-lg shadow-sm">
-            <div className="text-sm text-gray-500 mb-1">Completed</div>
-            <div className="text-2xl font-bold text-emerald-600">{stats.completedTransactions}</div>
-          </div>
-          <div className="bg-white p-5 rounded-lg shadow-sm">
-            <div className="text-sm text-gray-500 mb-1">Pending</div>
-            <div className="text-2xl font-bold text-amber-500">{stats.pendingTransactions}</div>
-          </div>
-          <div className="bg-white p-5 rounded-lg shadow-sm">
-            <div className="text-sm text-gray-500 mb-1">Avg. Amount</div>
-            <div className="text-2xl font-bold text-indigo-600">{fmtAmount(stats.averageTransactionAmount)}</div>
-          </div>
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Payments & Transactions</h1>
+          <p className="text-gray-600">Manage payment transactions, process refunds, and view financial data.</p>
         </div>
-      )}
 
-      {/* Filters */}
-      <div className="bg-white p-5 rounded-lg shadow-sm mb-5">
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4 mb-4">
-          <input
-            type="text"
-            name="search"
-            placeholder="Search transactions..."
-            value={filters.search}
-            onChange={handleFilterChange}
-            className="px-3 py-2 border border-gray-300 rounded-md"
-          />
-          <select
-            name="type"
-            value={filters.type}
-            onChange={handleFilterChange}
-            className="px-3 py-2 border border-gray-300 rounded-md"
-          >
-            <option value="">All Types</option>
-            <option value="GameTime">Game Time</option>
-            <option value="Product">Product</option>
-            <option value="WalletTopup">Wallet Top-up</option>
-            <option value="Refund">Refund</option>
-            <option value="LoyaltyRedemption">Loyalty Redemption</option>
-          </select>
-          <select
-            name="status"
-            value={filters.status}
-            onChange={handleFilterChange}
-            className="px-3 py-2 border border-gray-300 rounded-md"
-          >
-            <option value="">All Statuses</option>
+        {/* Statistics Cards */}
+        {stats && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-gray-600">Total Transactions</div>
+                  <div className="text-2xl font-bold text-gray-900 mt-2">{stats.totalTransactions}</div>
+                </div>
+                <div className="p-3 bg-indigo-100 rounded-lg">
+                  <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-gray-600">Total Revenue</div>
+                  <div className="text-2xl font-bold text-emerald-600 mt-2">{fmtAmount(stats.totalRevenue)}</div>
+                </div>
+                <div className="p-3 bg-emerald-100 rounded-lg">
+                  <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-gray-600">Completed</div>
+                  <div className="text-2xl font-bold text-emerald-600 mt-2">{stats.completedTransactions}</div>
+                </div>
+                <div className="p-3 bg-emerald-100 rounded-lg">
+                  <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-gray-600">Pending</div>
+                  <div className="text-2xl font-bold text-amber-500 mt-2">{stats.pendingTransactions}</div>
+                </div>
+                <div className="p-3 bg-amber-100 rounded-lg">
+                  <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-gray-600">Avg. Amount</div>
+                  <div className="text-2xl font-bold text-indigo-600 mt-2">{fmtAmount(stats.averageTransactionAmount)}</div>
+                </div>
+                <div className="p-3 bg-indigo-100 rounded-lg">
+                  <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Filters */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Filter Transactions</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            <input
+              type="text"
+              name="search"
+              placeholder="Search transactions..."
+              value={filters.search}
+              onChange={handleFilterChange}
+              className="px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+            />
+            <select
+              name="type"
+              value={filters.type}
+              onChange={handleFilterChange}
+              className="px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+            >
+              <option value="">All Types</option>
+              <option value="GameTime">Game Time</option>
+              <option value="Product">Product</option>
+              <option value="WalletTopup">Wallet Top-up</option>
+              <option value="Refund">Refund</option>
+              <option value="LoyaltyRedemption">Loyalty Redemption</option>
+            </select>
+            <select
+              name="status"
+              value={filters.status}
+              onChange={handleFilterChange}
+              className="px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+            >
+              <option value="">All Statuses</option>
             <option value="Pending">Pending</option>
             <option value="Completed">Completed</option>
             <option value="Failed">Failed</option>
@@ -378,7 +426,7 @@ export default function Payments() {
             name="paymentMethod"
             value={filters.paymentMethod}
             onChange={handleFilterChange}
-            className="px-3 py-2 border border-gray-300 rounded-md"
+            className="px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
           >
             <option value="">All Payment Methods</option>
             <option value="Cash">Cash</option>
@@ -389,14 +437,14 @@ export default function Payments() {
             <option value="BankTransfer">Bank Transfer</option>
           </select>
         </div>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
           <input
             type="number"
             name="minAmount"
             placeholder="Min Amount"
             value={filters.minAmount}
             onChange={handleFilterChange}
-            className="px-3 py-2 border border-gray-300 rounded-md"
+            className="px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
           />
           <input
             type="number"
@@ -404,21 +452,21 @@ export default function Payments() {
             placeholder="Max Amount"
             value={filters.maxAmount}
             onChange={handleFilterChange}
-            className="px-3 py-2 border border-gray-300 rounded-md"
+            className="px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
           />
           <input
             type="date"
             name="startDate"
             value={filters.startDate}
             onChange={handleFilterChange}
-            className="px-3 py-2 border border-gray-300 rounded-md"
+            className="px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
           />
           <input
             type="date"
             name="endDate"
             value={filters.endDate}
             onChange={handleFilterChange}
-            className="px-3 py-2 border border-gray-300 rounded-md"
+            className="px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
           />
           <input
             type="number"
@@ -426,21 +474,27 @@ export default function Payments() {
             placeholder="User ID"
             value={filters.userId}
             onChange={handleFilterChange}
-            className="px-3 py-2 border border-gray-300 rounded-md"
+            className="px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
           />
         </div>
         <div className="flex gap-3">
           <button
             onClick={clearFilters}
-            className="px-4 py-2 bg-gray-500 text-white border-none rounded-md cursor-pointer"
+            className="inline-flex items-center px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white text-sm font-medium rounded-lg transition-colors duration-200"
           >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
             Clear Filters
           </button>
           {(hasRole('Admin') || hasRole('Manager') || hasRole('Staff')) && (
             <button
               onClick={openCreateModal}
-              className="px-4 py-2 bg-emerald-600 text-white border-none rounded-md cursor-pointer"
+              className="inline-flex items-center px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors duration-200"
             >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
               New Transaction
             </button>
           )}
@@ -448,91 +502,101 @@ export default function Payments() {
       </div>
 
       {/* Transactions Table */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {loading ? (
-          <div className="p-10 text-center">
+          <div className="p-12 text-center">
             <LoadingSpinner size={32} />
-            <div className="mt-3 text-gray-500">Loading transactions...</div>
+            <div className="mt-4 text-gray-500 text-lg">Loading transactions...</div>
           </div>
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
+              <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="p-3 text-left font-semibold text-gray-700">ID</th>
-                    <th className="p-3 text-left font-semibold text-gray-700">User</th>
-                    <th className="p-3 text-left font-semibold text-gray-700">Description</th>
-                    <th className="p-3 text-right font-semibold text-gray-700">Amount</th>
-                    <th className="p-3 text-center font-semibold text-gray-700">Type</th>
-                    <th className="p-3 text-center font-semibold text-gray-700">Method</th>
-                    <th className="p-3 text-center font-semibold text-gray-700">Status</th>
-                    <th className="p-3 text-left font-semibold text-gray-700">Date</th>
-                    <th className="p-3 text-center font-semibold text-gray-700">Actions</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Method</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="bg-white divide-y divide-gray-200">
                   {transactions.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="p-10 text-center text-gray-500">
-                        No transactions found
+                      <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
+                        <div className="flex flex-col items-center">
+                          <svg className="w-12 h-12 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <p className="text-lg font-medium text-gray-900 mb-1">No transactions found</p>
+                          <p className="text-gray-500">Try adjusting your filters or create a new transaction</p>
+                        </div>
                       </td>
                     </tr>
                   ) : (
                     transactions.map((transaction) => (
-                      <tr key={transaction.transactionId} className="border-t border-gray-100">
-                        <td className="p-3 text-gray-700">#{transaction.transactionId}</td>
-                        <td className="p-3 text-gray-700">{transaction.username}</td>
-                        <td className="p-3 text-gray-700">
-                          <div className="max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap">
+                      <tr key={transaction.transactionId} className="hover:bg-gray-50 transition-colors duration-200">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          #{transaction.transactionId}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {transaction.username}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900">
+                          <div className="max-w-xs overflow-hidden text-ellipsis">
                             {transaction.description}
                           </div>
                         </td>
-                        <td className="p-3 text-right text-gray-700 font-semibold">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-right text-gray-900 font-semibold">
                           {fmtAmount(transaction.amount)}
                         </td>
-                        <td className="p-3 text-center">
-                          <span style={{
-                            padding: '4px 8px',
-                            borderRadius: '12px',
-                            fontSize: '12px',
-                            fontWeight: '600',
-                            background: getTypeColor(transaction.type) + '20',
-                            color: getTypeColor(transaction.type)
-                          }}>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            transaction.type === 'GameTime' ? 'bg-blue-100 text-blue-800' :
+                            transaction.type === 'Product' ? 'bg-emerald-100 text-emerald-800' :
+                            transaction.type === 'WalletTopup' ? 'bg-purple-100 text-purple-800' :
+                            transaction.type === 'Refund' ? 'bg-red-100 text-red-800' :
+                            transaction.type === 'LoyaltyRedemption' ? 'bg-amber-100 text-amber-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
                             {transaction.type}
                           </span>
                         </td>
-                        <td className="p-3 text-center text-gray-500 text-sm">
+                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-500">
                           {transaction.paymentMethod}
                         </td>
-                        <td className="p-3 text-center">
-                          <span style={{
-                            padding: '4px 8px',
-                            borderRadius: '12px',
-                            fontSize: '12px',
-                            fontWeight: '600',
-                            background: getStatusColor(transaction.status) + '20',
-                            color: getStatusColor(transaction.status)
-                          }}>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            transaction.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' :
+                            transaction.status === 'Pending' ? 'bg-amber-100 text-amber-800' :
+                            transaction.status === 'Failed' ? 'bg-red-100 text-red-800' :
+                            transaction.status === 'Cancelled' ? 'bg-gray-100 text-gray-800' :
+                            transaction.status === 'Refunded' ? 'bg-purple-100 text-purple-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
                             {transaction.status}
                           </span>
                         </td>
-                        <td className="p-3 text-gray-500 text-sm">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {fmtDate(transaction.createdAt)}
                         </td>
-                        <td className="p-3 text-center">
-                          <div className="flex gap-1 justify-center">
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => openViewModal(transaction)}
-                              className="px-2 py-1 text-xs bg-indigo-600 text-white border-none rounded cursor-pointer"
+                              className="inline-flex items-center px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-md hover:bg-indigo-200 transition-colors duration-200"
                             >
                               View
                             </button>
                             {(hasRole('Admin') || hasRole('Manager') || hasRole('Staff')) && (
                               <button
                                 onClick={() => openStatusModal(transaction)}
-                                className="px-2 py-1 text-xs bg-amber-500 text-white border-none rounded cursor-pointer"
+                                className="inline-flex items-center px-2 py-1 text-xs font-medium bg-amber-100 text-amber-700 rounded-md hover:bg-amber-200 transition-colors duration-200"
                               >
                                 Status
                               </button>
@@ -540,7 +604,7 @@ export default function Payments() {
                             {(hasRole('Admin') || hasRole('Manager')) && transaction.status === 'Completed' && (
                               <button
                                 onClick={() => openRefundModal(transaction)}
-                                className="px-2 py-1 text-xs bg-red-500 text-white border-none rounded cursor-pointer"
+                                className="inline-flex items-center px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-md hover:bg-red-200 transition-colors duration-200"
                               >
                                 Refund
                               </button>
@@ -830,6 +894,7 @@ export default function Payments() {
           />
         </SimpleModal>
       )}
+      </div>
     </div>
   );
 }
