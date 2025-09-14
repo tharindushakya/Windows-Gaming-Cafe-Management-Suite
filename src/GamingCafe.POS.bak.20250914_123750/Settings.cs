@@ -26,10 +26,6 @@ public class Settings
     public string EmailColumnName { get; set; } = "";
     public int UserQueryPageSize { get; set; } = 500;
     public bool EnableUserPaging { get; set; } = true;
-
-    // Database provider preference: "Auto" | "SqlServer" | "Postgres"
-    // When "Auto" the app will use a heuristic to pick the provider based on the connection string.
-    public string DatabaseProvider { get; set; } = "Auto";
     
     public static Settings Load()
     {

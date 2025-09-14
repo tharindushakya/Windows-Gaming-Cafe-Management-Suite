@@ -1,7 +1,9 @@
-<Application x:Class="GamingCafe.POS.App"
+﻿<Application x:Class="GamingCafe.POS.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:GamingCafe.POS"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
+         
     </Application.Resources>
 </Application>
